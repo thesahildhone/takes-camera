@@ -57,6 +57,8 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:0;border-radiu
 .shutter i{width:62px;height:62px;border-radius:50%;background:var(--fg);transition:all .18s}
 .shutter.video i{background:var(--rec)}
 .shutter.recording i{width:30px;height:30px;border-radius:8px;background:var(--rec)}
+.shutter.busy{opacity:.5;pointer-events:none}
+.shutter *{pointer-events:none}
 .right{justify-self:end}
 
 .review{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;
@@ -206,7 +208,7 @@ $('#m-photo').onclick=()=>setMode('photo');$('#m-video').onclick=()=>setMode('vi
 
 let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2400)}
 
-$('#shutter').onclick=()=>{if(mode==='photo')takePhoto();else rec?stopRec():startRec()};
+$('#shutter').addEventListener('click',e=>{e.preventDefault();if(mode==='photo')takePhoto();else rec?stopRec():startRec()});
 
 function takePhoto(){
   cv.toBlob(b=>{if(!b)return toast('Could not take the photo');
@@ -221,14 +223,25 @@ async function startRec(){
   try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:14000000}:{videoBitsPerSecond:14000000})}catch(e){return toast('Recording failed to start.')}
   chunks=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
   const smooth=Math.round(amt*100),w=cv.width,h=cv.height;
-  rec.onstop=()=>{const type=((rec.mimeType||mime||'video/mp4').split(';')[0])||'video/mp4';const blob=new Blob(chunks,{type});rec=null;
-    $('#shutter').classList.remove('recording');$('#timer').hidden=true;$('#label').hidden=false;clearInterval(tInt);
-    if(!blob.size)return toast('Recording came out empty. Try again.');showReview({kind:'video',blob,w,h,smooth,dur:(Date.now()-recStart)/1000})};
-  rec.start(500);recStart=Date.now();
+  const r=rec,type=((r.mimeType||mime||'video/mp4').split(';')[0])||'video/mp4';let finished=false;
+  finishRec=()=>{if(finished)return;finished=true;clearTimeout(stopT);const dur=(stopAt||Date.now())-recStart;
+    const blob=new Blob(chunks,{type});rec=null;stopping=false;
+    $('#shutter').classList.remove('recording','busy');$('#timer').hidden=true;$('#label').hidden=false;clearInterval(tInt);
+    if(!blob.size)return toast('Recording came out empty. Try again.');showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
+  r.onstop=()=>setTimeout(finishRec,60);
+  r.onerror=()=>finishRec();
+  r.start(1000);recStart=Date.now();stopAt=0;
   $('#shutter').classList.add('recording');$('#shutter').setAttribute('aria-label','Stop recording');$('#timer').hidden=false;$('#label').hidden=true;
   tInt=setInterval(()=>{const s=Math.floor((Date.now()-recStart)/1000);$('#t').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`},250);
 }
-function stopRec(){try{rec&&rec.stop()}catch(e){}}
+let finishRec=()=>{},stopT=0,stopAt=0,stopping=false;
+function stopRec(){
+  if(!rec||stopping)return;stopping=true;stopAt=Date.now();clearInterval(tInt);
+  $('#shutter').classList.add('busy');$('#t').textContent='Saving…';
+  try{if(rec.state==='recording')rec.requestData()}catch(e){}
+  try{if(rec.state!=='inactive')rec.stop();else finishRec()}catch(e){finishRec()}
+  stopT=setTimeout(()=>finishRec(),2500); // safety net if the phone never confirms the stop
+}
 
 /* ---- review & save ---- */
 function showReview(r){

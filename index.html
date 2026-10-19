@@ -160,6 +160,7 @@ function initGL(){
   return true;
 }
 function frame(){
+  if(vid&&vid.paused&&!document.hidden)vid.play().catch(()=>{});
   if(vid&&vid.readyState>=2&&vid.videoWidth){
     const w=vid.videoWidth,h=vid.videoHeight;
     if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;$('#res').textContent=`${Math.max(w,h)}p`}
@@ -174,9 +175,13 @@ function frame(){
 /* ---- camera ---- */
 async function startCam(){
   if(stream)stream.getTracks().forEach(t=>t.stop());
-  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}});
-  if(!vid){vid=document.createElement('video');vid.className='src';vid.muted=true;vid.playsInline=true;vid.setAttribute('playsinline','');vid.setAttribute('muted','');document.body.appendChild(vid)}
-  vid.srcObject=stream;await vid.play().catch(()=>{});
+  const v={facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}};
+  // Ask for camera + mic together: on iPhone, opening the mic later cuts the camera feed.
+  try{stream=await navigator.mediaDevices.getUserMedia({video:v,audio:{echoCancellation:true,noiseSuppression:true}})}
+  catch(e){if(e&&e.name==='NotAllowedError'&&!stream){try{stream=await navigator.mediaDevices.getUserMedia({video:v,audio:false});toast('No microphone access. Videos will record without sound.')}catch(e2){throw e2}}else throw e}
+  if(!vid){vid=document.createElement('video');vid.className='src';vid.muted=true;vid.playsInline=true;vid.setAttribute('playsinline','');vid.setAttribute('muted','');document.body.appendChild(vid);
+    vid.addEventListener('pause',()=>{if(!document.hidden)vid.play().catch(()=>{})})}
+  vid.srcObject=new MediaStream(stream.getVideoTracks());await vid.play().catch(()=>{});
 }
 $('#start').onclick=async()=>{
   const err=m=>{const e=$('#gerr');e.textContent=m;e.hidden=false};
@@ -210,7 +215,8 @@ function takePhoto(){
 async function startRec(){
   if(!window.MediaRecorder||!cv.captureStream)return toast('This phone cannot record from the filtered camera.');
   const out=cv.captureStream(30);
-  try{if(!micStream)micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});micStream.getAudioTracks().forEach(t=>out.addTrack(t))}catch(e){toast('No microphone access. Recording without sound.')}
+  stream.getAudioTracks().forEach(t=>{t.enabled=true;out.addTrack(t)});
+  if(vid.paused)vid.play().catch(()=>{});
   const mime=['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m)}catch(e){return false}})||'';
   try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:14000000}:{videoBitsPerSecond:14000000})}catch(e){return toast('Recording failed to start.')}
   chunks=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};

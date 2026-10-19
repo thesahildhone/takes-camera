@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Takes Recording Test</title>
+<style>
+:root{--bg:#09080a;--fg:#f4eff2;--muted:#a59eab;--line:rgba(255,255,255,.14);--ok:#7fd3a8;--bad:#ff6b78;--accent:#f0b49b;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,sans-serif;padding:calc(env(safe-area-inset-top,0px) + 16px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 24px) max(16px,env(safe-area-inset-left,0px));touch-action:manipulation}
+h1{font-size:22px;margin:0 0 6px}
+p{color:var(--muted);margin:0 0 14px;line-height:1.45}
+.prev{display:flex;gap:8px;margin-bottom:14px}
+.prev video,.prev canvas{width:31%;aspect-ratio:9/16;object-fit:cover;border-radius:10px;background:#000;border:1px solid var(--line)}
+button{width:100%;height:52px;border:0;border-radius:999px;background:var(--accent);color:#2a140c;font-weight:700;font-size:16px}
+button[disabled]{opacity:.5}
+ol{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:8px}
+li{border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px}
+li b{display:block;margin-bottom:2px}
+li span{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted);word-break:break-all}
+.ok b{color:var(--ok)} .bad b{color:var(--bad)}
+pre{white-space:pre-wrap;word-break:break-all;font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:12px}
+</style>
+</head>
+<body>
+<h1>Recording test</h1>
+<p>Tap the button and hold the phone still for about 30 seconds while it tries 5 ways of recording. Then screenshot the results and send them to Claude.</p>
+<div class="prev"><video id="v" playsinline muted autoplay></video><canvas id="c2"></canvas><canvas id="cg"></canvas></div>
+<button id="run" type="button">Run all tests</button>
+<ol id="out"></ol>
+<pre id="env"></pre>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const v=$('#v'),c2=$('#c2'),cg=$('#cg'),x2=c2.getContext('2d');
+let stream=null,raf=0,gl=null;
+const types=['video/mp4','video/mp4;codecs=avc1','video/webm','video/webm;codecs=vp8'];
+$('#env').textContent=[navigator.userAgent,
+ 'MediaRecorder: '+!!window.MediaRecorder,
+ 'supported: '+(window.MediaRecorder?types.filter(t=>{try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}}).join(', '):'-'),
+ 'canvas.captureStream: '+!!HTMLCanvasElement.prototype.captureStream,
+ 'VideoEncoder: '+('VideoEncoder' in window)+'  VideoFrame: '+('VideoFrame' in window)+'  AudioEncoder: '+('AudioEncoder' in window)].join('\n');
+
+function initGL(){gl=cg.getContext('webgl',{preserveDrawingBuffer:true});if(!gl)return;
+ const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o};
+ const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,'attribute vec2 a;varying vec2 u;void main(){u=a*.5+.5;gl_Position=vec4(a,0.,1.);}'));
+ gl.attachShader(p,sh(gl.FRAGMENT_SHADER,'precision mediump float;uniform sampler2D t;varying vec2 u;void main(){gl_FragColor=texture2D(t,u);}'));gl.linkProgram(p);gl.useProgram(p);
+ const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+ const a=gl.getAttribLocation(p,'a');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
+ const tx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tx);[gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T].forEach(k=>gl.texParameteri(gl.TEXTURE_2D,k,gl.CLAMP_TO_EDGE));
+ [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER].forEach(k=>gl.texParameteri(gl.TEXTURE_2D,k,gl.LINEAR));gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true)}
+function loop(){
+ if(v.readyState>=2&&v.videoWidth){const w=v.videoWidth,h=v.videoHeight;
+  if(c2.width!==w){c2.width=w;c2.height=h;cg.width=w;cg.height=h}
+  x2.drawImage(v,0,0,w,h);
+  if(gl){gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,v);gl.viewport(0,0,w,h);gl.drawArrays(gl.TRIANGLE_STRIP,0,4)}}
+ raf=requestAnimationFrame(loop)}
+
+function record(name,src){return new Promise(res=>{
+ const info={ev:'',chunks:0,bytes:0,err:''};let rec,done=false;
+ const end=why=>{if(done)return;done=true;info.ev+='|'+why;res({name,...info,ok:info.bytes>0,mime:rec?rec.mimeType:''})};
+ try{const mime=types.find(t=>{try{return MediaRecorder.isTypeSupported(t)}catch(e){return false}});rec=new MediaRecorder(src,mime?{mimeType:mime}:{})}catch(e){info.err='create:'+e.name;return end('nocreate')}
+ rec.onstart=()=>info.ev+='s';rec.ondataavailable=e=>{info.ev+='d';if(e.data&&e.data.size){info.chunks++;info.bytes+=e.data.size}};
+ rec.onstop=()=>{info.ev+='x';setTimeout(()=>end('stop'),200)};rec.onerror=e=>{info.err=(e.error&&e.error.name)||'err';end('error')};
+ try{rec.start()}catch(e){info.err='start:'+e.name;return end('nostart')}
+ setTimeout(()=>{try{rec.stop()}catch(e){info.err='stop:'+e.name;end('nostop')}},3000);
+ setTimeout(()=>end('timeout'),8000);})}
+
+function show(r){const li=document.createElement('li');li.className=r.ok?'ok':'bad';
+ li.innerHTML=`<b>${r.ok?'WORKS':'FAILS'} · ${r.name}</b><span>${r.mime||'-'} · chunks ${r.chunks} · ${(r.bytes/1024).toFixed(0)} KB · ev ${r.ev}${r.err?' · '+r.err:''}</span>`;$('#out').appendChild(li)}
+
+$('#run').onclick=async()=>{
+ const btn=$('#run');btn.disabled=true;$('#out').innerHTML='';
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1920},height:{ideal:1080}},audio:true})}
+ catch(e){btn.disabled=false;btn.textContent='Camera blocked: '+e.name;return}
+ v.srcObject=new MediaStream(stream.getVideoTracks());await v.play().catch(()=>{});initGL();cancelAnimationFrame(raf);loop();
+ await new Promise(r=>setTimeout(r,800));
+ const aud=stream.getAudioTracks(),vt=stream.getVideoTracks();
+ const tests=[
+  ['1 · Camera straight (video + sound)',()=>new MediaStream([...vt,...aud])],
+  ['2 · Camera straight (video only)',()=>new MediaStream(vt)],
+  ['3 · Plain canvas (video only)',()=>c2.captureStream(30)],
+  ['4 · Plain canvas + sound',()=>{const s=c2.captureStream(30);aud.forEach(t=>s.addTrack(t));return s}],
+  ['5 · Smoothing canvas (video only)',()=>cg.captureStream(30)]];
+ for(const [n,mk] of tests){btn.textContent='Testing '+n.split(' · ')[0]+' of 5…';let s;try{s=mk()}catch(e){show({name:n,ok:false,ev:'',chunks:0,bytes:0,err:'stream:'+e.name});continue}
+  show(await record(n,s));await new Promise(r=>setTimeout(r,500))}
+ btn.textContent='Done. Screenshot this page.';
+};
+})();
+</script>
+</body>
+</html>

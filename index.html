@@ -228,7 +228,8 @@ async function startRec(){
   if(!window.MediaRecorder||!rc.captureStream)return toast('This phone cannot record from the filtered camera.');
   rc.width=cv.width;rc.height=cv.height;rctx.drawImage(cv,0,0);rec2d=true;
   const out=rc.captureStream(30);
-  const aud=stream.getAudioTracks();aud.forEach(t=>{t.enabled=true;out.addTrack(t)});
+  const aud=stream.getAudioTracks().filter(t=>t.readyState==='live'&&!t.muted);aud.forEach(t=>{t.enabled=true;out.addTrack(t)});
+  if(stream.getAudioTracks().length&&!aud.length)toast('Microphone is busy (a call?). Recording without sound.');
   if(vid.paused)vid.play().catch(()=>{});
   const mime=['video/mp4','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m)}catch(e){return false}})||'';
   diag={mime:mime||'default',v:out.getVideoTracks().length,a:aud.length,size:rc.width+'x'+rc.height,chunks:0,bytes:0,err:'',events:''};

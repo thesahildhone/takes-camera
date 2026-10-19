@@ -246,7 +246,7 @@ async function startRec(){
     const type=((r.mimeType||mime||'video/mp4').split(';')[0])||'video/mp4';
     const blob=new Blob(chunks,{type});rec=null;stopping=false;rec2d=false;cmpB.disabled=false;
     $('#shutter').classList.remove('recording','busy');$('#timer').hidden=true;$('#label').hidden=false;clearInterval(tInt);
-    if(!blob.size)return showDiag('Recording came out empty.');showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
+    if(!blob.size)return showDiag(diag.bytes===0&&/timeout|stop/.test(why||'')?'Nothing was recorded. If you are on a phone or FaceTime call, iPhone blocks video recording until the call ends. End the call and try again.':'Recording came out empty.');showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
   r.onstart=()=>diag.events+='s';
   r.onstop=()=>{diag.events+='x';setTimeout(()=>finishRec('stop'),150)};
   r.onerror=e=>{diag.err=(e&&e.error&&(e.error.name||e.error.message))||'unknown';finishRec('error')};

@@ -18,8 +18,8 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);overflow:hidden;overscroll-behavior:none}
-button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+html,body{touch-action:manipulation;-webkit-user-select:none;user-select:none;height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);overflow:hidden;overscroll-behavior:none}
+button{touch-action:manipulation;font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:12px}
 #stage{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg)}
 #cv{width:100%;height:100%;object-fit:cover;display:block}
@@ -170,6 +170,7 @@ function frame(){
     gl.viewport(0,0,w,h);
     gl.uniform1f(U.u_amt,cmp?0:amt);gl.uniform2f(U.u_px,1/w,1/h);gl.uniform1f(U.u_rad,Math.max(1,Math.max(w,h)/700));gl.uniform1f(U.u_mir,facing==='user'?1:0);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    if(rec2d){if(rc.width!==w||rc.height!==h){rc.width=w;rc.height=h}rctx.drawImage(cv,0,0,w,h)}
   }
   raf=requestAnimationFrame(frame);
 }
@@ -216,31 +217,34 @@ function takePhoto(){
 }
 async function startRec(){
   if(!window.MediaRecorder||!cv.captureStream)return toast('This phone cannot record from the filtered camera.');
-  const out=cv.captureStream(30);
+  if(!rc.captureStream)return toast('This phone cannot record from the filtered camera.');
+  rc.width=cv.width;rc.height=cv.height;rctx.drawImage(cv,0,0);rec2d=true;
+  const out=rc.captureStream(30);
   stream.getAudioTracks().forEach(t=>{t.enabled=true;out.addTrack(t)});
   if(vid.paused)vid.play().catch(()=>{});
   const mime=['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m)}catch(e){return false}})||'';
-  try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:14000000}:{videoBitsPerSecond:14000000})}catch(e){return toast('Recording failed to start.')}
+  try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:14000000}:{videoBitsPerSecond:14000000})}catch(e){rec2d=false;return toast('Recording failed to start.')}
   chunks=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
   const smooth=Math.round(amt*100),w=cv.width,h=cv.height;
   const r=rec,type=((r.mimeType||mime||'video/mp4').split(';')[0])||'video/mp4';let finished=false;
   finishRec=()=>{if(finished)return;finished=true;clearTimeout(stopT);const dur=(stopAt||Date.now())-recStart;
-    const blob=new Blob(chunks,{type});rec=null;stopping=false;
+    const blob=new Blob(chunks,{type});rec=null;stopping=false;rec2d=false;
     $('#shutter').classList.remove('recording','busy');$('#timer').hidden=true;$('#label').hidden=false;clearInterval(tInt);
-    if(!blob.size)return toast('Recording came out empty. Try again.');showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
+    if(!blob.size){const m=recErr?'Recording failed ('+recErr+'). Try again.':'Recording came out empty. Try again.';recErr='';return toast(m)}showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
   r.onstop=()=>setTimeout(finishRec,60);
-  r.onerror=()=>finishRec();
+  r.onerror=e=>{recErr=(e&&e.error&&(e.error.name||e.error.message))||'unknown';finishRec()};
   r.start(1000);recStart=Date.now();stopAt=0;
   $('#shutter').classList.add('recording');$('#shutter').setAttribute('aria-label','Stop recording');$('#timer').hidden=false;$('#label').hidden=true;
   tInt=setInterval(()=>{const s=Math.floor((Date.now()-recStart)/1000);$('#t').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`},250);
 }
-let finishRec=()=>{},stopT=0,stopAt=0,stopping=false;
+let finishRec=()=>{},stopT=0,stopAt=0,stopping=false,rec2d=false,recErr='';
+const rc=document.createElement('canvas'),rctx=rc.getContext('2d');
 function stopRec(){
-  if(!rec||stopping)return;stopping=true;stopAt=Date.now();clearInterval(tInt);
+  if(!rec||stopping)return;if(Date.now()-recStart<800)return;stopping=true;stopAt=Date.now();clearInterval(tInt);
   $('#shutter').classList.add('busy');$('#t').textContent='Saving…';
   try{if(rec.state==='recording')rec.requestData()}catch(e){}
   try{if(rec.state!=='inactive')rec.stop();else finishRec()}catch(e){finishRec()}
-  stopT=setTimeout(()=>finishRec(),2500); // safety net if the phone never confirms the stop
+  stopT=setTimeout(()=>finishRec(),8000); // safety net if the phone never confirms the stop
 }
 
 /* ---- review & save ---- */
@@ -258,6 +262,7 @@ $('#save').onclick=async()=>{
   try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}catch(e){if(e&&e.name==='AbortError')return}
   const a=document.createElement('a');a.href=result.url;a.download=name;document.body.appendChild(a);a.click();a.remove();
 };
+['gesturestart','gesturechange','dblclick'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&rec)stopRec()});
 })();
 </script>

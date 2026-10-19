@@ -165,7 +165,9 @@ function initGL(){
   ['u_amt','u_px','u_rad','u_mir'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   return true;
 }
+let lastFrame=0,frameCost=16,gen=0,running=false;
 function frame(){
+  const t0=performance.now();lastFrame=t0;
   if(vid&&vid.paused&&!document.hidden)vid.play().catch(()=>{});
   if(vid&&vid.readyState>=2&&vid.videoWidth){
     const w=vid.videoWidth,h=vid.videoHeight;
@@ -176,8 +178,12 @@ function frame(){
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     if(rec2d){if(rc.width!==w||rc.height!==h){rc.width=w;rc.height=h}rctx.drawImage(cv,0,0,w,h)}
   }
-  raf=requestAnimationFrame(frame);
+  const now=performance.now();frameCost=frameCost*.8+(now-t0)*.2;lastFrame=now;
+  schedule();
 }
+function schedule(){const g=gen;if(vid&&vid.requestVideoFrameCallback){vid.requestVideoFrameCallback(()=>{if(g===gen)frame()})}else{raf=requestAnimationFrame(()=>{if(g===gen)frame()})}}
+// Watchdog: if the camera stops handing over frames (switching camera, a hiccup), restart the drawing loop.
+setInterval(()=>{if(running&&!document.hidden&&performance.now()-lastFrame>Math.max(1000,frameCost*6)){gen++;frame()}},500);
 
 /* ---- camera ---- */
 async function startCam(){
@@ -195,7 +201,7 @@ $('#start').onclick=async()=>{
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return err('This browser cannot open the camera. On iPhone, open this link in Safari.');
   if(!initGL())return err('This phone cannot run the smoothing filter (WebGL is off).');
   try{await startCam()}catch(e){return err(e&&e.name==='NotAllowedError'?'Camera access was blocked. In Safari, tap aA in the address bar, then Website Settings, and allow Camera.':'Could not start the camera: '+(e&&e.message||e))}
-  $('#gate').hidden=true;cancelAnimationFrame(raf);frame();
+  $('#gate').hidden=true;cancelAnimationFrame(raf);gen++;running=true;frame();
 };
 $('#flip').onclick=async()=>{if(rec)return;facing=facing==='user'?'environment':'user';try{await startCam()}catch(e){facing=facing==='user'?'environment':'user';try{await startCam()}catch(_){}toast('Could not switch camera')}};
 
@@ -226,10 +232,9 @@ function takePhoto(){
     showReview({kind:'photo',blob:b,w:cv.width,h:cv.height,smooth:Math.round(amt*100)})},'image/jpeg',.95);
 }
 async function startRec(){
-  if(!window.MediaRecorder||!rc.captureStream)return toast('This phone cannot record from the filtered camera.');
+  if(!window.MediaRecorder||!cv.captureStream)return toast('This phone cannot record from the filtered camera.');
   cmp=false;$('#badge').hidden=true;cmpB.disabled=true;
-  rc.width=cv.width;rc.height=cv.height;rctx.drawImage(cv,0,0);rec2d=true;
-  const out=rc.captureStream(30);
+  const out=cv.captureStream(30);
   const aud=stream.getAudioTracks().filter(t=>t.readyState==='live'&&!t.muted);aud.forEach(t=>{t.enabled=true;out.addTrack(t)});
   if(stream.getAudioTracks().length&&!aud.length)toast('Microphone is busy (a call?). Recording without sound.');
   if(vid.paused)vid.play().catch(()=>{});

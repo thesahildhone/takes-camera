@@ -75,6 +75,9 @@ video.src{position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left
 .gate h1{font-size:24px;margin:0}
 .gate p{margin:0;color:var(--muted);line-height:1.5}
 .toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 70px);transform:translateX(-50%);background:var(--fg);color:var(--bg);font-weight:600;font-size:13.5px;padding:9px 15px;border-radius:999px;max-width:calc(100% - 32px);text-align:center;z-index:9}
+.diag{position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top,0px) + 64px);background:var(--fg);color:var(--bg);border-radius:14px;padding:12px 14px;font-size:13.5px;line-height:1.45;z-index:10}
+.diag span{font-family:var(--f-mono);font-size:11.5px;word-break:break-all}
+.diag button{margin-top:8px;font-weight:700;text-decoration:underline}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -124,6 +127,7 @@ video.src{position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
+<div class="diag" id="diag" hidden></div>
 
 <script>
 (function(){
@@ -221,35 +225,42 @@ function takePhoto(){
     showReview({kind:'photo',blob:b,w:cv.width,h:cv.height,smooth:Math.round(amt*100)})},'image/jpeg',.95);
 }
 async function startRec(){
-  if(!window.MediaRecorder||!cv.captureStream)return toast('This phone cannot record from the filtered camera.');
-  if(!rc.captureStream)return toast('This phone cannot record from the filtered camera.');
+  if(!window.MediaRecorder||!rc.captureStream)return toast('This phone cannot record from the filtered camera.');
   rc.width=cv.width;rc.height=cv.height;rctx.drawImage(cv,0,0);rec2d=true;
   const out=rc.captureStream(30);
-  stream.getAudioTracks().forEach(t=>{t.enabled=true;out.addTrack(t)});
+  const aud=stream.getAudioTracks();aud.forEach(t=>{t.enabled=true;out.addTrack(t)});
   if(vid.paused)vid.play().catch(()=>{});
-  const mime=['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m)}catch(e){return false}})||'';
-  try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:14000000}:{videoBitsPerSecond:14000000})}catch(e){rec2d=false;return toast('Recording failed to start.')}
-  chunks=[];rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  const mime=['video/mp4','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m)}catch(e){return false}})||'';
+  diag={mime:mime||'default',v:out.getVideoTracks().length,a:aud.length,size:rc.width+'x'+rc.height,chunks:0,bytes:0,err:'',events:''};
+  try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:8000000}:{})}catch(e){rec2d=false;return showDiag('Recording failed to start ('+(e&&e.name||e)+')')}
+  chunks=[];rec.ondataavailable=e=>{diag.events+='d';if(e.data&&e.data.size){chunks.push(e.data);diag.chunks++;diag.bytes+=e.data.size}};
   const smooth=Math.round(amt*100),w=cv.width,h=cv.height;
-  const r=rec,type=((r.mimeType||mime||'video/mp4').split(';')[0])||'video/mp4';let finished=false;
-  finishRec=()=>{if(finished)return;finished=true;clearTimeout(stopT);const dur=(stopAt||Date.now())-recStart;
+  const r=rec;let finished=false;
+  finishRec=why=>{if(finished)return;finished=true;clearTimeout(stopT);diag.events+='|'+(why||'');const dur=(stopAt||Date.now())-recStart;
+    const type=((r.mimeType||mime||'video/mp4').split(';')[0])||'video/mp4';
     const blob=new Blob(chunks,{type});rec=null;stopping=false;rec2d=false;
     $('#shutter').classList.remove('recording','busy');$('#timer').hidden=true;$('#label').hidden=false;clearInterval(tInt);
-    if(!blob.size){const m=recErr?'Recording failed ('+recErr+'). Try again.':'Recording came out empty. Try again.';recErr='';return toast(m)}showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
-  r.onstop=()=>setTimeout(finishRec,60);
-  r.onerror=e=>{recErr=(e&&e.error&&(e.error.name||e.error.message))||'unknown';finishRec()};
-  r.start(1000);recStart=Date.now();stopAt=0;
+    if(!blob.size)return showDiag('Recording came out empty.');showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
+  r.onstart=()=>diag.events+='s';
+  r.onstop=()=>{diag.events+='x';setTimeout(()=>finishRec('stop'),150)};
+  r.onerror=e=>{diag.err=(e&&e.error&&(e.error.name||e.error.message))||'unknown';finishRec('error')};
+  r.start();recStart=Date.now();stopAt=0;
   $('#shutter').classList.add('recording');$('#shutter').setAttribute('aria-label','Stop recording');$('#timer').hidden=false;$('#label').hidden=true;
   tInt=setInterval(()=>{const s=Math.floor((Date.now()-recStart)/1000);$('#t').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`},250);
 }
-let finishRec=()=>{},stopT=0,stopAt=0,stopping=false,rec2d=false,recErr='';
+let finishRec=()=>{},stopT=0,stopAt=0,stopping=false,rec2d=false,diag={};
+// The recording canvas must sit in the page: iPhone Safari sends no frames from a canvas that isn't attached.
 const rc=document.createElement('canvas'),rctx=rc.getContext('2d');
+rc.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';document.body.appendChild(rc);
 function stopRec(){
   if(!rec||stopping)return;if(Date.now()-recStart<800)return;stopping=true;stopAt=Date.now();clearInterval(tInt);
   $('#shutter').classList.add('busy');$('#t').textContent='Saving…';
-  try{if(rec.state==='recording')rec.requestData()}catch(e){}
-  try{if(rec.state!=='inactive')rec.stop();else finishRec()}catch(e){finishRec()}
-  stopT=setTimeout(()=>finishRec(),8000); // safety net if the phone never confirms the stop
+  try{if(rec.state!=='inactive')rec.stop();else finishRec('inactive')}catch(e){diag.err='stop:'+(e&&e.name);finishRec('stopfail')}
+  stopT=setTimeout(()=>finishRec('timeout'),10000);
+}
+function showDiag(msg){
+  const d=$('#diag');d.innerHTML=`<b>${msg}</b><br>Screenshot this and send it to Claude.<br><span>${[diag.mime,diag.size,'v'+diag.v+' a'+diag.a,'chunks '+diag.chunks,'bytes '+diag.bytes,diag.err?('err '+diag.err):'','ev '+diag.events].filter(Boolean).join(' · ')}</span><br><button type="button" id="diag-x">Close</button>`;
+  d.hidden=false;$('#diag-x').onclick=()=>d.hidden=true;
 }
 
 /* ---- review & save ---- */

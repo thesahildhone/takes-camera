@@ -58,6 +58,7 @@ video.src{position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left
 .shutter.recording i{width:30px;height:30px;border-radius:8px;background:var(--rec)}
 .shutter.busy{opacity:.5;pointer-events:none}
 .shutter *{pointer-events:none}
+.cmp:disabled{opacity:.4}
 .right{justify-self:end}
 
 .review{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;
@@ -196,7 +197,7 @@ $('#start').onclick=async()=>{
   try{await startCam()}catch(e){return err(e&&e.name==='NotAllowedError'?'Camera access was blocked. In Safari, tap aA in the address bar, then Website Settings, and allow Camera.':'Could not start the camera: '+(e&&e.message||e))}
   $('#gate').hidden=true;cancelAnimationFrame(raf);frame();
 };
-$('#flip').onclick=async()=>{if(rec)return;facing=facing==='user'?'environment':'user';try{await startCam()}catch(e){toast('Could not switch camera')}};
+$('#flip').onclick=async()=>{if(rec)return;facing=facing==='user'?'environment':'user';try{await startCam()}catch(e){facing=facing==='user'?'environment':'user';try{await startCam()}catch(_){}toast('Could not switch camera')}};
 
 /* ---- controls ---- */
 const amtEl=$('#amt');
@@ -209,7 +210,7 @@ amtEl.addEventListener('pointermove',e=>{if(dragging){e.preventDefault();fromX(e
 amtEl.addEventListener('keydown',e=>{const v=Math.round(amt*100);if(e.key==='ArrowRight'||e.key==='ArrowUp'){setAmt(v+5);e.preventDefault()}if(e.key==='ArrowLeft'||e.key==='ArrowDown'){setAmt(v-5);e.preventDefault()}});
 setAmt(45);
 const cmpB=$('#cmp');
-cmpB.addEventListener('pointerdown',e=>{e.preventDefault();cmp=true;$('#badge').hidden=false});
+cmpB.addEventListener('pointerdown',e=>{e.preventDefault();if(rec){toast('Compare is off while recording');return}cmp=true;$('#badge').hidden=false});
 ['pointerup','pointerleave','pointercancel'].forEach(t=>cmpB.addEventListener(t,()=>{cmp=false;$('#badge').hidden=true}));
 cmpB.addEventListener('contextmenu',e=>e.preventDefault());
 function setMode(m){if(rec)return;mode=m;$('#m-photo').setAttribute('aria-pressed',m==='photo');$('#m-video').setAttribute('aria-pressed',m==='video');
@@ -226,20 +227,24 @@ function takePhoto(){
 }
 async function startRec(){
   if(!window.MediaRecorder||!rc.captureStream)return toast('This phone cannot record from the filtered camera.');
+  cmp=false;$('#badge').hidden=true;cmpB.disabled=true;
   rc.width=cv.width;rc.height=cv.height;rctx.drawImage(cv,0,0);rec2d=true;
   const out=rc.captureStream(30);
   const aud=stream.getAudioTracks().filter(t=>t.readyState==='live'&&!t.muted);aud.forEach(t=>{t.enabled=true;out.addTrack(t)});
   if(stream.getAudioTracks().length&&!aud.length)toast('Microphone is busy (a call?). Recording without sound.');
   if(vid.paused)vid.play().catch(()=>{});
-  const mime=['video/mp4','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m)}catch(e){return false}})||'';
+  // Safari: plain mp4 (proven on iPhone). Other browsers: ask for H.264 explicitly, else WebM, so the file always has a picture.
+  const apple=/Apple/.test(navigator.vendor||'');
+  const prefs=apple?['video/mp4','video/mp4;codecs=avc1']:['video/mp4;codecs=avc1,mp4a.40.2','video/mp4;codecs=avc1,opus','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  const mime=prefs.find(m=>{try{return MediaRecorder.isTypeSupported(m)}catch(e){return false}})||'';
   diag={mime:mime||'default',v:out.getVideoTracks().length,a:aud.length,size:rc.width+'x'+rc.height,chunks:0,bytes:0,err:'',events:''};
-  try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:8000000}:{})}catch(e){rec2d=false;return showDiag('Recording failed to start ('+(e&&e.name||e)+')')}
+  try{rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:8000000}:{})}catch(e){rec2d=false;cmpB.disabled=false;return showDiag('Recording failed to start ('+(e&&e.name||e)+')')}
   chunks=[];rec.ondataavailable=e=>{diag.events+='d';if(e.data&&e.data.size){chunks.push(e.data);diag.chunks++;diag.bytes+=e.data.size}};
   const smooth=Math.round(amt*100),w=cv.width,h=cv.height;
   const r=rec;let finished=false;
   finishRec=why=>{if(finished)return;finished=true;clearTimeout(stopT);diag.events+='|'+(why||'');const dur=(stopAt||Date.now())-recStart;
     const type=((r.mimeType||mime||'video/mp4').split(';')[0])||'video/mp4';
-    const blob=new Blob(chunks,{type});rec=null;stopping=false;rec2d=false;
+    const blob=new Blob(chunks,{type});rec=null;stopping=false;rec2d=false;cmpB.disabled=false;
     $('#shutter').classList.remove('recording','busy');$('#timer').hidden=true;$('#label').hidden=false;clearInterval(tInt);
     if(!blob.size)return showDiag('Recording came out empty.');showReview({kind:'video',blob,w,h,smooth,dur:dur/1000})};
   r.onstart=()=>diag.events+='s';
@@ -253,8 +258,8 @@ let finishRec=()=>{},stopT=0,stopAt=0,stopping=false,rec2d=false,diag={};
 // The recording canvas must sit in the page: iPhone Safari sends no frames from a canvas that isn't attached.
 const rc=document.createElement('canvas'),rctx=rc.getContext('2d');
 rc.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';document.body.appendChild(rc);
-function stopRec(){
-  if(!rec||stopping)return;if(Date.now()-recStart<800)return;stopping=true;stopAt=Date.now();clearInterval(tInt);
+function stopRec(force){
+  if(!rec||stopping)return;if(!force&&Date.now()-recStart<800)return;stopping=true;stopAt=Date.now();clearInterval(tInt);
   $('#shutter').classList.add('busy');$('#t').textContent='Saving…';
   try{if(rec.state!=='inactive')rec.stop();else finishRec('inactive')}catch(e){diag.err='stop:'+(e&&e.name);finishRec('stopfail')}
   stopT=setTimeout(()=>finishRec('timeout'),10000);
@@ -268,7 +273,7 @@ function showDiag(msg){
 function showReview(r){
   result=r;const url=URL.createObjectURL(r.blob);r.url=url;
   $('#media').innerHTML=r.kind==='photo'?`<img src="${url}" alt="Your photo">`:`<video src="${url}" controls playsinline autoplay loop></video>`;
-  $('#rmeta').textContent=`${r.w} × ${r.h} · smoothing ${r.smooth}${r.dur?' · '+r.dur.toFixed(1)+'s':''} · ${(r.blob.size/1048576).toFixed(1)} MB`;
+  $('#rmeta').textContent=`${r.w} × ${r.h} · smoothing ${r.smooth}${r.dur?' · '+r.dur.toFixed(1)+'s':''} · ${r.blob.size<1048576?Math.max(1,Math.round(r.blob.size/1024))+' KB':(r.blob.size/1048576).toFixed(1)+' MB'}`;
   $('#review').hidden=false;
 }
 $('#retake').onclick=()=>{const v=$('#media video');if(v)v.pause();if(result)URL.revokeObjectURL(result.url);result=null;$('#review').hidden=true};
@@ -280,7 +285,7 @@ $('#save').onclick=async()=>{
   const a=document.createElement('a');a.href=result.url;a.download=name;document.body.appendChild(a);a.click();a.remove();
 };
 ['gesturestart','gesturechange','dblclick'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&rec)stopRec()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&rec)stopRec(true)});
 })();
 </script>
 </body>

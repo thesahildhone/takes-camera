@@ -1,0 +1,21 @@
+import type { JSX } from 'react'
+const s = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+const I = (d: JSX.Element) => () => <svg viewBox="0 0 24 24" {...s} aria-hidden="true">{d}</svg>
+export const IcX = I(<path d="M6 6l12 12M18 6L6 18" />)
+export const IcBack = I(<path d="M15 6l-6 6 6 6" />)
+export const IcNext = I(<path d="M5 12h14M13 6l6 6-6 6" />)
+export const IcCam = I(<><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13" r="3.6" /></>)
+export const IcVid = I(<><rect x="3" y="6.5" width="13" height="11" rx="2" /><path d="M16 10.5l5-3v9l-5-3z" /></>)
+export const IcPlus = I(<path d="M12 5v14M5 12h14" />)
+export const IcLib = I(<><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M3.5 16l5-5 4 4 3-3 5 5" /><circle cx="15.5" cy="9" r="1.5" /></>)
+export const IcCheck = I(<path d="M5 12.5l4.5 4.5L19 7.5" />)
+export const IcTick = I(<><circle cx="12" cy="12" r="9" /><path d="M8 12.3l2.8 2.7L16 9.6" /></>)
+export const IcBell = I(<><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9" /><path d="M10 20a2 2 0 0 0 4 0" /></>)
+export const IcUp = I(<path d="M8 12l4-4 4 4M12 8v10" />)
+export const IcDown = I(<path d="M8 12l4 4 4-4M12 16V6" />)
+export const IcCopy = I(<><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></>)
+export const IcTrash = I(<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />)
+export const IcMenu = I(<path d="M4 7h16M4 12h16M4 17h16" />)
+export const IcFlip = I(<><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><path d="M9.5 12.5a2.6 2.6 0 0 1 4.6-1.4M14.5 13.5a2.6 2.6 0 0 1-4.6 1.4" /></>)
+export const IcDownload = I(<path d="M12 4v11M7 10l5 5 5-5M5 20h14" />)
+export const IcUser = I(<><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-5 8-5s6.5 1 8 5" /></>)

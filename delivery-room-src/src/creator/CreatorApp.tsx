@@ -20,8 +20,9 @@ export function CTop({ title }: { title?: string }) {
 }
 
 export default function CreatorApp() {
-  const { staff, creatorOf } = useAuth()
+  const { staff, creatorOf, profile } = useAuth()
   if (staff.length && !creatorOf.length) return <Navigate to="/agency" replace />
+  if (profile?.kind === 'business' && !staff.length && !creatorOf.length) return <Navigate to="/setup" replace />
   return <Routes>
     <Route index element={<Home />} />
     <Route path="a/:id" element={<Runner />} />

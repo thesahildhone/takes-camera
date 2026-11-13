@@ -9,6 +9,7 @@ function Home() {
   const { session, profile, staff, ready } = useAuth()
   if (!ready) return <div className="public"><Loading /></div>
   if (!session) return <Welcome />
+  if (!profile) return <div className="public"><Loading /></div>
   if (staff.length) return <Navigate to="/agency" replace />
   if (profile?.kind === 'business') return <Navigate to="/setup" replace />
   return <Navigate to="/creator" replace />

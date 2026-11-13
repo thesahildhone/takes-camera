@@ -42,7 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); load(data.session) })
-    const { data: sub } = sb.auth.onAuthStateChange((ev, s) => { setSession(s); if (ev === 'SIGNED_IN' || ev === 'SIGNED_OUT' || ev === 'USER_UPDATED') load(s) })
+    const { data: sub } = sb.auth.onAuthStateChange((ev, s) => {
+      // hold routing until the profile for this session is loaded, otherwise a brand-new agency gets sent to the creator side
+      if (ev === 'SIGNED_IN' || ev === 'SIGNED_OUT' || ev === 'USER_UPDATED') { setReady(false); setSession(s); load(s) } else setSession(s)
+    })
     return () => sub.subscription.unsubscribe()
   }, [load])
 

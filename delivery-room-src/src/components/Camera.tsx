@@ -4,8 +4,8 @@ import { IcFlip, IcX } from '../lib/icons'
 export interface CamResult { blob: Blob; kind: 'photo' | 'video'; smoothing: number; width: number; height: number; duration: number | null }
 interface Props { accept: 'photo' | 'video' | 'any'; title: string; initialSmooth: number; onSmooth: (v: number) => void; onUse: (r: CamResult) => void; onClose: () => void }
 
-const VS = 'attribute vec2 a;varying vec2 v;void main(){v=a*.5+.5;gl_Position=vec4(a,0.,1.);}'
-const FS = `precision highp float;uniform sampler2D u_img;uniform vec2 u_px;uniform float u_amt,u_rad,u_mir;varying vec2 v;
+export const VS = 'attribute vec2 a;varying vec2 v;void main(){v=a*.5+.5;gl_Position=vec4(a,0.,1.);}'
+export const FS = `precision highp float;uniform sampler2D u_img;uniform vec2 u_px;uniform float u_amt,u_rad,u_mir;varying vec2 v;
 float skin(vec3 c){float y=dot(c,vec3(.299,.587,.114));float cb=(c.b-y)*.564+.5;float cr=(c.r-y)*.713+.5;
  return smoothstep(.49,.53,cr)*(1.-smoothstep(.67,.72,cr))*smoothstep(.26,.30,cb)*(1.-smoothstep(.51,.56,cb));}
 void main(){vec2 uv=vec2(u_mir>.5?1.-v.x:v.x,v.y);vec3 c=texture2D(u_img,uv).rgb;

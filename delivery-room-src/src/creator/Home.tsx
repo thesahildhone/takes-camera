@@ -5,6 +5,9 @@ import { useAuth } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, StatusPill } from '../lib/ui'
 import { dueLabel, slotsFor, type Assignment } from '../lib/types'
 import { CTop } from './CreatorApp'
+import SocialHome from './SocialHome'
+
+const SIDE_KEY = 'dr.side'
 
 const TABS = [
   { k: 'todo', label: 'To do', m: (s: string) => s === 'not_started' || s === 'in_progress' },
@@ -16,6 +19,8 @@ const TABS = [
 export default function Home() {
   const { profile, creatorOf } = useAuth()
   const [tab, setTab] = useState('todo'); const [wsF, setWsF] = useState('all')
+  const [side, setSideS] = useState<'socials' | 'of'>(() => { try { return localStorage.getItem(SIDE_KEY) === 'of' ? 'of' : 'socials' } catch { return 'socials' } })
+  const setSide = (v: 'socials' | 'of') => { setSideS(v); try { localStorage.setItem(SIDE_KEY, v) } catch { /* */ } }
   const { data, loading, error } = useAsync(async () => {
     const [a, f] = await Promise.all([
       sb.from('assignments').select('*').eq('creator_id', profile!.id).neq('status', 'cancelled').order('created_at', { ascending: false }),
@@ -35,8 +40,18 @@ export default function Home() {
   const prog = (a: Assignment) => { let req = 0, have = 0; a.pages.forEach(p => slotsFor(p).forEach(s => { if (s.required) { req++; if (data?.got[a.id]?.has(p.id + ':' + s.key)) have++ } })); return { req, have } }
   const first = (profile?.full_name || '').split(' ')[0]
 
+  const toggle = <div className="sidetoggle" role="tablist" aria-label="Section">
+    <button role="tab" aria-selected={side === 'socials'} onClick={() => setSide('socials')}>Socials</button>
+    <button role="tab" aria-selected={side === 'of'} onClick={() => setSide('of')}>OF</button></div>
+  if (side === 'socials') return <div className="phone soc">
+    <CTop />
+    <h1 className="soc-name">{profile?.full_name || 'Your shots'}</h1>
+    {toggle}
+    <SocialHome />
+  </div>
   return <div className="phone">
     <CTop />
+    {toggle}
     <div className="stack" style={{ marginBottom: 14 }}>
       <p className="eyebrow">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
       <h1 style={{ fontSize: 28, lineHeight: 1.12 }}>{first ? `Hi ${first}, ` : ''}{counts.todo + counts.redo ? `you have ${counts.todo + counts.redo} to film.` : 'you\'re all caught up.'}</h1>

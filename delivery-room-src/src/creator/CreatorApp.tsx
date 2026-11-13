@@ -7,6 +7,7 @@ import Home from './Home'
 import Runner from './Runner'
 import Inbox from './Inbox'
 import Account from './Account'
+import SocialProject from './SocialProject'
 
 export function CTop({ title }: { title?: string }) {
   const { session } = useAuth(); const [unread, setUnread] = useState(0); const loc = useLocation()
@@ -24,6 +25,7 @@ export default function CreatorApp() {
   return <Routes>
     <Route index element={<Home />} />
     <Route path="a/:id" element={<Runner />} />
+    <Route path="s/p/:id" element={<SocialProject />} />
     <Route path="inbox" element={<Inbox />} />
     <Route path="account" element={<Account />} />
     <Route path="*" element={<Navigate to="/creator" replace />} />

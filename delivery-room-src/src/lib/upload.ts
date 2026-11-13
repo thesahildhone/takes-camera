@@ -7,11 +7,11 @@ export interface PendingRec { key: string; assignmentId: string; workspaceId: st
 
 const CHUNK = 6 * 1024 * 1024
 
-async function uploadObject(path: string, blob: Blob, onPct: (n: number) => void) {
+export async function uploadObject(path: string, blob: Blob, onPct: (n: number) => void, bucket = 'media') {
   const type = blob.type || 'application/octet-stream'
   if (blob.size <= CHUNK) {
     onPct(10)
-    const { error } = await sb.storage.from('media').upload(path, blob, { contentType: type, upsert: false })
+    const { error } = await sb.storage.from(bucket).upload(path, blob, { contentType: type, upsert: false })
     if (error) throw error
     onPct(100); return
   }
@@ -24,7 +24,7 @@ async function uploadObject(path: string, blob: Blob, onPct: (n: number) => void
       retryDelays: [0, 2000, 5000, 10000, 20000, 30000],
       headers: { authorization: `Bearer ${token}`, apikey: SUPABASE_KEY, 'x-upsert': 'false' },
       uploadDataDuringCreation: true, removeFingerprintOnSuccess: true, chunkSize: CHUNK,
-      metadata: { bucketName: 'media', objectName: path, contentType: type, cacheControl: '3600' },
+      metadata: { bucketName: bucket, objectName: path, contentType: type, cacheControl: '3600' },
       onError: e => reject(e), onProgress: (s, t) => onPct(Math.round(s / t * 100)), onSuccess: () => resolve(),
     })
     up.findPreviousUploads().then(prev => { if (prev.length) up.resumeFromPreviousUpload(prev[0]); up.start() })

@@ -60,6 +60,8 @@ export default function SocialHome() {
   const c = typeId ? countsFor(typeId) : { total: 0, toFilm: 0, sent: 0 }
   const ring = c.total ? c.sent / c.total : 0
   const cur = secId ? shotsIn(d, secId) : []
+  const soon = d.asg.filter(a => a.due_at && isToFilm(a.status) && new Date(a.due_at).getTime() < Date.now() + 7 * 864e5)
+    .map(a => ({ a, p: d.projects.find(p => p.id === a.project_id)! })).filter(x => x.p).sort((x, y) => x.a.due_at!.localeCompare(y.a.due_at!))
 
   return <div className="stack" style={{ gap: 16 }}>
     {wsWith.length > 1 && <select className="sselect" aria-label="Agency" value={wsId || ''} onChange={e => setWsId(e.target.value)}>{wsWith.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}
@@ -68,6 +70,9 @@ export default function SocialHome() {
       <div className="ring" style={{ ['--p' as string]: ring }}><b>{c.toFilm}</b><span>left</span></div>
       <div><h2>{c.toFilm ? `${c.toFilm} shot${c.toFilm === 1 ? '' : 's'} to go` : c.total ? 'All sent' : 'Nothing here yet'}</h2><p>{c.sent} of {c.total} sent in total</p></div>
     </div>
+    {soon.length > 0 && <div className="weekcard"><h2>This week</h2>
+      {soon.slice(0, 4).map(({ a, p }) => <Link key={a.id} to={'/creator/s/p/' + p.id} className="between"><b>{p.title}</b><span className={'duechip' + (new Date(a.due_at!) < new Date() ? ' late' : '')}>{dueLabel(a.due_at)}</span></Link>)}
+      {soon.length > 4 && <span className="smuted" style={{ fontSize: 13 }}>and {soon.length - 4} more due this week</span>}</div>}
     {secs.length > 0 && <div className="secgrid">{secs.map(s => { const list = shotsIn(d, s.id), week = list.filter(x => d.sentWeek.has(x.a.id)).length
       return <button key={s.id} className="seccard" aria-pressed={s.id === secId} onClick={() => { setSecId(s.id); document.getElementById('shots')?.scrollIntoView({ behavior: 'smooth' }) }}>
         <span className="bar0"><i style={{ width: (list.filter(x => isSent(x.a.status)).length / list.length * 100) + '%' }} /></span>

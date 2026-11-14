@@ -5,6 +5,7 @@ import { useWs } from '../lib/auth'
 import { Loading, ErrorBox, useToast, Modal } from '../lib/ui'
 import { uploadObject } from '../lib/upload'
 import { videoMeta } from '../lib/media'
+import { aiWrite } from '../lib/ai'
 import { getCaps, importReference, processReference, PLACEHOLDER_TITLES, type Caps } from '../lib/refpipe'
 import { uid, fmtDate } from '../lib/types'
 import { fmtDur, MODE_LABEL, parseRef, readyProblem, RIGHTS_LABEL, SA_LABEL, SA_TONE, signed, usesAudio, usesScript, type Mode, type Project, type Rights, type SAssignment, type Section, type ContentType } from '../lib/social'
@@ -27,7 +28,7 @@ export default function ProjectEditor() {
   const [preview, setPreview] = useState(false); const [confirmReplace, setConfirmReplace] = useState<null | (() => void)>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const fileIn = useRef<HTMLInputElement>(null); const processing = useRef(false)
-  const [caps, setCaps] = useState<Caps | null>(null)
+  const [caps, setCaps] = useState<Caps | null>(null); const [polishing, setPolishing] = useState(false)
   useEffect(() => { getCaps().then(setCaps) }, [])
 
   const load = useCallback(async () => {
@@ -131,6 +132,11 @@ export default function ProjectEditor() {
       toast('Upload failed. Your shot details are safe. Try again.')
     }
   }
+  async function polish() {
+    setPolishing(true)
+    try { const r = await aiWrite<{ script: string }>(p!.workspace_id, 'polish', { script: f.script }); set('script', r.script); toast('Tightened. Read it, then approve.') }
+    catch (e) { toast(errMsg(e)) } finally { setPolishing(false) }
+  }
   async function approveScript() {
     if (!f.script.trim()) return toast('The script is empty')
     try { await patch({ script: f.script, transcript_approved: true } as Partial<Project>); setDirty(false); toast('Script approved') } catch (e) { toast(errMsg(e)) }
@@ -218,7 +224,7 @@ export default function ProjectEditor() {
       <textarea id="pj-script" className="textarea" rows={5} value={f.script} onChange={e => set('script', e.target.value)} />
       {p.transcript_raw && p.transcript_raw.length > 0 && <details><summary className="link">Timestamps from the reference</summary>
         <div className="segs-list">{p.transcript_raw.map((s, i) => <div key={i}><span className="mono muted">{fmtDur(s.start)}</span> {s.text}</div>)}</div></details>}
-      <div className="row"><button className="btn primary" disabled={!f.script.trim() || (p.transcript_approved && f.script === p.script)} onClick={approveScript}>Approve script</button></div>
+      <div className="row wrap"><button className="btn ghost" disabled={polishing || !f.script.trim()} onClick={polish}>{polishing ? 'Working…' : 'Tighten with AI'}</button><button className="btn primary" disabled={!f.script.trim() || (p.transcript_approved && f.script === p.script)} onClick={approveScript}>Approve script</button></div>
     </section>}
 
     {usesAudio(f.mode) && <section className="card stack"><h3>Sound for recording</h3>

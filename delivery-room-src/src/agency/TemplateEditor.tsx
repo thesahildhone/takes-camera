@@ -8,6 +8,8 @@ import { IcUp, IcDown, IcCopy, IcTrash } from '../lib/icons'
 import type { Cat, Tpl } from './Templates'
 import { reqSummary } from './Templates'
 import AssignModal from './AssignModal'
+import { aiWrite } from '../lib/ai'
+import { Modal } from '../lib/ui'
 
 function Num({ id, value, onChange, min = 0, max = 20 }: { id: string; value: number; onChange: (n: number) => void; min?: number; max?: number }) {
   return <input id={id} className="input num" type="number" inputMode="numeric" min={min} max={max} value={value} onChange={e => onChange(Math.max(min, Math.min(max, parseInt(e.target.value || '0', 10) || 0)))} />
@@ -17,6 +19,7 @@ export default function TemplateEditor() {
   const { id } = useParams(); const { ws } = useWs(); const toast = useToast()
   const [t, setT] = useState<Tpl | null>(null); const [dirty, setDirty] = useState(false); const [saving, setSaving] = useState(false)
   const [assign, setAssign] = useState(false); const [newCat, setNewCat] = useState('')
+  const [aiOpen, setAiOpen] = useState(false); const [aiBrief, setAiBrief] = useState(''); const [aiBusy, setAiBusy] = useState(false)
   const { data, loading, error, reload } = useAsync(async () => {
     const [tp, c, used] = await Promise.all([
       sb.from('templates').select('*').eq('id', id!).single(),
@@ -49,6 +52,17 @@ export default function TemplateEditor() {
     const { error } = await sb.from('templates').update({ title: cur.title.trim() || 'Untitled template', summary: cur.summary, category_id: cur.category_id, pages: cur.pages }).eq('id', cur.id)
     setSaving(false)
     if (error) toast(errMsg(error)); else { setDirty(false); if (!silent) toast('Saved') }
+  }
+  async function aiDraft() {
+    setAiBusy(true)
+    try {
+      const r = await aiWrite<{ title: string; summary: string; tips: string; parts: { title: string; body: string; photos: number; videos: number }[] }>(ws!.id, 'set', { brief: aiBrief })
+      const cur = tRef.current!; const blank = cur.pages.length === 0 || (cur.pages.length === 1 && !cur.pages[0].body.trim())
+      const pages: Page[] = [...(r.tips ? [{ ...newPage('info'), title: 'Before you start', body: r.tips }] : []),
+        ...r.parts.map(p => ({ ...newPage('media'), title: p.title, body: p.body, photos_min: p.photos, photos_max: p.photos, videos_min: p.videos, videos_max: p.videos }))]
+      upd({ pages: blank ? pages : [...cur.pages, ...pages], ...(blank && r.title ? { title: r.title, summary: r.summary } : {}) })
+      setAiOpen(false); setAiBrief(''); toast(`${pages.length} pages drafted. Edit them before you publish.`)
+    } catch (e) { toast(errMsg(e)) } finally { setAiBusy(false) }
   }
   async function addCat() {
     if (!newCat.trim()) return
@@ -87,7 +101,11 @@ export default function TemplateEditor() {
           <input id={'pg' + p.id} className="input" placeholder="Guidance, e.g. 10–30 seconds, vertical" value={p.guidance} onChange={e => updPage(i, { guidance: e.target.value })} />
         </>}
       </div>)}
-      <div className="row wrap"><button className="btn ghost" onClick={() => add('info')}>+ Instructions page</button><button className="btn ghost" onClick={() => add('media')}>+ Uploads page</button></div>
+      <div className="row wrap"><button className="btn ghost" onClick={() => add('info')}>+ Instructions page</button><button className="btn ghost" onClick={() => add('media')}>+ Uploads page</button><button className="btn ghost" onClick={() => setAiOpen(true)}>Draft with AI</button></div>
+      {aiOpen && <Modal center title="Draft this set with AI" onClose={() => { if (!aiBusy) setAiOpen(false) }}>
+        <label className="field"><span>Describe the set</span><textarea className="textarea" rows={4} value={aiBrief} maxLength={1500} onChange={e => setAiBrief(e.target.value)} placeholder="Cosy good-morning set filmed in bed: two free teasers, three paid parts, one bonus video." autoFocus /></label>
+        <p className="muted" style={{ fontSize: 13 }}>It drafts the page outline and keeps the wording non-explicit. Add your own detail after.</p>
+        <button className="btn lg primary block" disabled={aiBusy || aiBrief.trim().length < 8} onClick={aiDraft}>{aiBusy ? 'Writing…' : 'Draft pages'}</button></Modal>}
     </div>
     {assign && <AssignModal tpl={t} onClose={() => setAssign(false)} onDone={() => { setAssign(false); reload() }} />}
   </>

@@ -4,7 +4,7 @@ import { sb, errMsg } from '../lib/supabase'
 import { useWs } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, useToast, Modal } from '../lib/ui'
 import { IcDown, IcUp, IcPlus } from '../lib/icons'
-import { BulkAdd, AssignSection, type CreatorOpt } from './SectionTools'
+import { BulkAdd, AssignSection, AiShots, type CreatorOpt } from './SectionTools'
 import { MODE_LABEL, pad2, readyProblem, type ContentType, type Project, type SAssignment, type Section } from '../lib/social'
 
 const TYPE_KEY = 'dr.soc.type'
@@ -15,7 +15,7 @@ export default function Socials() {
   const [typeId, setTypeId] = useState<string | null>(() => { try { return localStorage.getItem(TYPE_KEY) } catch { return null } })
   const [edit, setEdit] = useState<Edit>(null); const [title, setTitle] = useState(''); const [desc, setDesc] = useState('')
   const [showArchived, setShowArchived] = useState(false); const [busy, setBusy] = useState(false)
-  const [bulk, setBulk] = useState<Section | null>(null); const [assign, setAssign] = useState<Section | null>(null)
+  const [bulk, setBulk] = useState<Section | null>(null); const [assign, setAssign] = useState<Section | null>(null); const [ai, setAi] = useState<Section | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
     await sb.rpc('social_bootstrap', { ws: ws!.id })
     const [t, s, p, a, c] = await Promise.all([
@@ -95,6 +95,7 @@ export default function Socials() {
           <div className="row wrap" style={{ gap: 6 }}>
             {nReady > 0 && <button className="btn sm ghost" onClick={() => publishReady(s)}>Publish {nReady} ready</button>}
             <button className="btn sm ghost" onClick={() => setAssign(s)}>Assign</button>
+            <button className="btn sm ghost" onClick={() => setAi(s)}>Write with AI</button>
             <button className="btn sm ghost" onClick={() => setBulk(s)}>Add from links</button>
             <button className="btn sm primary" onClick={() => addProject(s)}><IcPlus />Add shot</button>
           </div>
@@ -126,6 +127,7 @@ export default function Socials() {
       </section> })}
     {typeId && <button className="btn ghost" onClick={() => { setTitle(''); setDesc(''); setEdit({ kind: 'section', s: null }) }}><IcPlus />New section in {typeName(typeId)}</button>}
 
+    {ai && <AiShots section={ai} startAt={projectsOf(ai.id).length} onClose={ch => { setAi(null); if (ch) reload() }} />}
     {bulk && <BulkAdd section={bulk} startAt={projectsOf(bulk.id).length} onClose={ch => { setBulk(null); if (ch) reload() }} />}
     {assign && <AssignSection section={assign} creators={data.creators} shotCount={projectsOf(assign.id).filter(p => p.publication_status !== 'archived').length} onClose={ch => { setAssign(null); if (ch) reload() }} />}
     {edit && <Modal center title={edit.kind === 'section' ? (edit.s ? 'Edit section' : 'New section') : (edit.t ? 'Rename content type' : 'New content type')} onClose={() => setEdit(null)}>

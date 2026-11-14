@@ -15,6 +15,7 @@ import Socials from './Socials'
 import ProjectEditor from './ProjectEditor'
 import { SocialInbox, SocialReviewDetail } from './SocialReview'
 import AgencyInbox from './AgencyInbox'
+import Calendar from './Calendar'
 
 export default function AgencyApp() {
   const { staff, wsId, setWsId, profile, signOut } = useAuth()
@@ -45,6 +46,7 @@ export default function AgencyApp() {
         : <div className="card tight"><p className="eyebrow">Workspace</p><p style={{ fontWeight: 650 }}>{ws.name}</p></div>}
       <nav>
         <NavLink to="/agency" end>Overview</NavLink>
+        <NavLink to="/agency/calendar">Calendar</NavLink>
         <NavLink to="/agency/inbox">Notifications{unread > 0 && <span className="count">{unread}</span>}</NavLink>
         <p className="nav-h">Socials</p>
         <NavLink to="/agency/socials">Sections & shots</NavLink>
@@ -78,6 +80,7 @@ export default function AgencyApp() {
         <Route path="social-review" element={<SocialInbox />} />
         <Route path="social-review/:id" element={<SocialReviewDetail />} />
         <Route path="inbox" element={<AgencyInbox />} />
+        <Route path="calendar" element={<Calendar />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/agency" replace />} />
       </Routes>

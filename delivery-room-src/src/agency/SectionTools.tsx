@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { sb, errMsg } from '../lib/supabase'
 import { Modal, useToast } from '../lib/ui'
 import { MODE_LABEL, parseRef, type Mode, type Project, type Section } from '../lib/social'
+import { aiWrite } from '../lib/ai'
 import { getCaps, importReference, processReference, type Caps } from '../lib/refpipe'
 
 export interface CreatorOpt { id: string; name: string }
@@ -80,5 +81,46 @@ export function AssignSection({ section, creators, shotCount, onClose }: { secti
     </>}
     <label className="check"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /><span><b>Keep this section assigned to everyone</b><br /><span className="muted" style={{ fontSize: 13 }}>New shots here, and creators who join later, are assigned automatically.</span></span></label>
     <button className="btn lg primary block" disabled={busy} onClick={go}>{ids.length && shotCount ? 'Assign' : 'Save'}</button>
+  </Modal>
+}
+
+interface Idea { title: string; script: string; notes: string; on: boolean }
+export function AiShots({ section, startAt, onClose }: { section: Section; startAt: number; onClose: (changed: boolean) => void }) {
+  const toast = useToast()
+  const [brief, setBrief] = useState(''); const [count, setCount] = useState(5); const [kind, setKind] = useState<'talking' | 'reference'>('talking')
+  const [ideas, setIdeas] = useState<Idea[] | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null)
+  async function gen() {
+    setBusy(true); setErr(null)
+    try { const r = await aiWrite<{ shots: Omit<Idea, 'on'>[] }>(section.workspace_id, 'shots', { brief, count, kind, section: section.title }); setIdeas(r.shots.map(s => ({ ...s, on: true }))) }
+    catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
+  const upd = (i: number, p: Partial<Idea>) => setIdeas(cur => cur && cur.map((x, k) => k === i ? { ...x, ...p } : x))
+  const picked = (ideas || []).filter(i => i.on)
+  async function add() {
+    setBusy(true)
+    const { error } = await sb.from('social_projects').insert(picked.map((s, i) => ({ workspace_id: section.workspace_id, section_id: section.id, title: s.title, position: startAt + i,
+      mode: kind, script: s.script, instructions: s.notes, transcript_approved: false })))
+    setBusy(false)
+    if (error) return toast(errMsg(error))
+    toast(`${picked.length} draft shot${picked.length === 1 ? '' : 's'} added. ${kind === 'talking' ? 'Approve each script, then publish.' : 'Add a reference to each, then publish.'}`); onClose(true)
+  }
+  return <Modal center title={`Write shots for ${section.title}`} onClose={() => { if (!busy) onClose(false) }}>
+    {!ideas ? <>
+      <label className="field"><span>What do you want?</span><textarea className="textarea" rows={4} value={brief} maxLength={1500} onChange={e => setBrief(e.target.value)} placeholder="Talking-head hooks for a gamer-girl persona. Playful and teasing, under 10 seconds each." autoFocus /></label>
+      <div className="grid2">
+        <label className="field"><span>How many</span><select className="select" value={count} onChange={e => setCount(Number(e.target.value))}>{[3, 5, 10, 15].map(n => <option key={n} value={n}>{n} shots</option>)}</select></label>
+        <label className="field"><span>Type</span><select className="select" value={kind} onChange={e => setKind(e.target.value as 'talking' | 'reference')}><option value="talking">Talking, with a script</option><option value="reference">No script, action only</option></select></label>
+      </div>
+      {err && <div className="err" role="alert">{err}</div>}
+      <button className="btn lg primary block" disabled={busy || brief.trim().length < 8} onClick={gen}>{busy ? 'Writing…' : 'Write them'}</button>
+      <p className="muted" style={{ fontSize: 13 }}>You get drafts to edit. Nothing reaches creators until you approve and publish it.</p>
+    </> : <>
+      <p className="muted" style={{ fontSize: 13.5 }}>Edit anything, untick the ones you don't want, then add them as drafts.</p>
+      <div className="list" style={{ maxHeight: '52vh', overflow: 'auto' }}>{ideas.map((s, i) => <div key={i} className="card tight stack" style={{ gap: 8, opacity: s.on ? 1 : .5 }}>
+        <label className="check"><input type="checkbox" checked={s.on} onChange={e => upd(i, { on: e.target.checked })} /><input className="input" aria-label="Title" value={s.title} onChange={e => upd(i, { title: e.target.value })} /></label>
+        {kind === 'talking' && <textarea className="textarea" aria-label="Script" rows={2} value={s.script} onChange={e => upd(i, { script: e.target.value })} />}
+        <textarea className="textarea" aria-label="Notes" rows={3} style={{ fontSize: 13.5 }} value={s.notes} onChange={e => upd(i, { notes: e.target.value })} /></div>)}</div>
+      <div className="row"><button className="btn ghost" disabled={busy} onClick={() => setIdeas(null)}>Back</button><button className="btn primary grow" disabled={busy || !picked.length} onClick={add}>Add {picked.length} as drafts</button></div>
+    </>}
   </Modal>
 }

@@ -18,3 +18,10 @@ Spec: social_media_workflow_spec_v3 (Socials only; OF flow untouched).
 - Creator camera (components/SocialCamera.tsx): multi-clip, per-clip redo/trim/delete+undo/reorder, still/scroll teleprompter, dance sound cueing with countdown, drafts in IndexedDB. Joining (lib/assemble.ts) re-records clips in real time into clean + optional music copy.
 - "Sent" = submitted or approved, used for all counters.
 - Tests: e2e/creator_flow.py and e2e/agency_flow.py (Playwright, Supabase mocked; needs `vite preview` on :4173 and e2e/ref.mp4 + ref.wav).
+
+## Trial build (14 Nov 2026)
+- Edge functions: `social-import` (source in supabase/functions; link download via Apify, transcripts via OpenAI) and `ai-write` (Write with AI via the Anthropic API; source is deployed in Supabase only).
+- Secrets, all optional, each switches a feature on: APIFY_TOKEN, OPENAI_API_KEY, ANTHROPIC_API_KEY (and ANTHROPIC_MODEL, APIFY_IG_ACTOR, APIFY_TT_ACTOR to override defaults).
+- New RPCs: social_assign_section, social_publish_ready, nudge_creator; cron `delivery-room-due-reminders` hourly.
+- Talking shots no longer need a reference to publish (script only is enough).
+- Agency: Calendar, Notifications, unified Overview. Creator: This week card, deadlines, note on send.

@@ -4,8 +4,8 @@ import { sb, errMsg } from '../lib/supabase'
 import { useWs } from '../lib/auth'
 import { Loading, ErrorBox, useToast, Modal } from '../lib/ui'
 import { uploadObject } from '../lib/upload'
-import { extractAudio, videoMeta } from '../lib/media'
-import { transcribe } from '../lib/whisper'
+import { videoMeta } from '../lib/media'
+import { getCaps, importReference, processReference, PLACEHOLDER_TITLES, type Caps } from '../lib/refpipe'
 import { uid, fmtDate } from '../lib/types'
 import { fmtDur, MODE_LABEL, parseRef, readyProblem, RIGHTS_LABEL, SA_LABEL, SA_TONE, signed, usesAudio, usesScript, type Mode, type Project, type Rights, type SAssignment, type Section, type ContentType } from '../lib/social'
 import ShotView from '../components/ShotView'
@@ -27,6 +27,8 @@ export default function ProjectEditor() {
   const [preview, setPreview] = useState(false); const [confirmReplace, setConfirmReplace] = useState<null | (() => void)>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const fileIn = useRef<HTMLInputElement>(null); const processing = useRef(false)
+  const [caps, setCaps] = useState<Caps | null>(null)
+  useEffect(() => { getCaps().then(setCaps) }, [])
 
   const load = useCallback(async () => {
     const [r, s, t, c, a] = await Promise.all([
@@ -36,7 +38,7 @@ export default function ProjectEditor() {
       sb.from('creator_memberships').select('creator_id,profiles(full_name,email)').eq('workspace_id', ws!.id).eq('status', 'active'),
       sb.from('social_assignments').select('*').eq('project_id', id!),
     ])
-    if (r.error || !r.data) { setErr('This project could not be found.'); return null }
+    if (r.error || !r.data) { setErr('This shot could not be found.'); return null }
     const proj = r.data as Project; setP(proj)
     const tn = Object.fromEntries(((t.data || []) as ContentType[]).map(x => [x.id, x.name]))
     setSections(((s.data || []) as Section[]).filter(x => !x.archived_at || x.id === proj.section_id).map(x => ({ ...x, typeName: tn[x.content_type_id] || '' })))
@@ -54,30 +56,17 @@ export default function ProjectEditor() {
     if (error) throw error; setP(data as Project); return data as Project
   }
 
-  // processing: extract audio (always, it's cheap and lets the mode change later) + transcript for spoken modes
+  // pull the sound out of the stored reference, and the script for talking shots
   const processRef = useCallback(async (proj: Project, blob?: Blob) => {
     if (processing.current || !proj.ref_video_path) return
     processing.current = true
-    const needScript = usesScript(proj.mode)
     try {
-      await patch({ audio_status: 'processing', audio_error: null, ...(needScript ? { transcript_status: 'processing', transcript_error: null } : {}) } as Partial<Project>)
-      setStage('Reading the reference video…')
-      if (!blob) { const u = (await signed([proj.ref_video_path]))[proj.ref_video_path]; const r = await fetch(u); if (!r.ok) throw new Error('Could not open the stored reference'); blob = await r.blob() }
-      let ex: Awaited<ReturnType<typeof extractAudio>>
-      try { setStage('Extracting the sound…'); ex = await extractAudio(blob) }
-      catch (e) { await patch({ audio_status: 'failed', audio_error: errMsg(e), ...(needScript ? { transcript_status: 'failed', transcript_error: 'No audio to transcribe. Type the script yourself.' } : {}) } as Partial<Project>); throw e }
-      const apath = `${proj.workspace_id}/ref/${proj.id}/audio-${uid().slice(0, 12)}.wav`
-      setStage('Saving the sound…'); await uploadObject(apath, ex.wav, () => {}, 'social')
-      let cur = await patch({ ref_audio_path: apath, audio_status: 'ready', ref_duration: Math.round(ex.duration * 100) / 100 } as Partial<Project>)
-      setUrls(await signed([cur.ref_video_path, apath]))
-      if (needScript) {
-        try {
-          const out = await transcribe(ex.pcm16k, setStage)
-          cur = await patch({ transcript_raw: out.segs, transcript_status: 'ready', transcript_approved: false, ...(!cur.transcript_approved || !cur.script.trim() ? { script: out.text } : {}) } as Partial<Project>)
-          setF(x => ({ ...x, script: cur.script }))
-          toast('Transcript ready. Check it, then approve it.')
-        } catch (e) { await patch({ transcript_status: 'failed', transcript_error: errMsg(e) } as Partial<Project>); toast('Transcript failed. You can type the script yourself.') }
-      }
+      const done = await processReference(proj, setStage, blob)
+      setP(done); setUrls(await signed([done.ref_video_path, done.ref_audio_path]))
+      if (usesScript(done.mode)) {
+        setF(x => ({ ...x, script: done.script, title: PLACEHOLDER_TITLES.includes(x.title) ? done.title : x.title }))
+        toast(done.transcript_status === 'ready' ? 'Script is in. Check it, then approve it.' : done.transcript_error || 'Transcript failed. You can type the script.')
+      } else if (done.audio_status === 'failed') toast(done.audio_error || 'Could not pull out the sound.')
     } catch (e) { toast(errMsg(e)) } finally { processing.current = false; setStage(null) }
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -107,13 +96,11 @@ export default function ProjectEditor() {
       try {
         // the link and every field are saved before any import attempt, so a failure never loses work
         await patch({ title: f.title.trim() || 'Untitled shot', description: f.description, mode: f.mode, instructions: f.instructions, script: f.script, section_id: f.section_id, rights_status: f.rights, keep_mic: f.keep_mic,
-          reference_url: url, ref_platform: parseRef(url)?.platform || null, import_status: 'importing', import_error: null } as Partial<Project>)
-        setDirty(false); setStage('Trying to import the video…')
-        const { error } = await sb.functions.invoke('social-import', { body: { project_id: id } })
-        if (error) await patch({ import_status: 'failed', import_error: 'The import service did not respond. Try again, or upload the file.' } as Partial<Project>)
-        const proj = await load()
-        setStage(null)
-        if (proj?.import_status === 'ready') { toast('Imported'); if (usesScript(proj.mode) || usesAudio(proj.mode)) processRef(proj) }
+          reference_url: url, ref_platform: parseRef(url)?.platform || null } as Partial<Project>)
+        setDirty(false); setStage(parseRef(url)?.platform === 'file' || parseRef(url)?.platform === 'other' ? 'Importing the video…' : 'Downloading the video from the link. This can take up to a minute…')
+        const proj = await importReference(id!)
+        setP(proj); setUrls(await signed([proj.ref_video_path, proj.ref_audio_path])); setStage(null)
+        if (proj.import_status === 'ready') { toast('Video imported'); processRef(proj) }
       } catch (e) { setStage(null); toast(errMsg(e)) }
     }
     if (resetsWork && p!.ref_video_path) setConfirmReplace(() => go); else go()
@@ -141,7 +128,7 @@ export default function ProjectEditor() {
       processRef(proj, file)
     } catch (e) {
       setUpPct(null); await patch({ import_status: p!.ref_video_path ? 'ready' : 'awaiting_upload', import_error: 'Upload failed: ' + errMsg(e) } as Partial<Project>).catch(() => {})
-      toast('Upload failed. Your project details are safe. Try again.')
+      toast('Upload failed. Your shot details are safe. Try again.')
     }
   }
   async function approveScript() {
@@ -161,7 +148,7 @@ export default function ProjectEditor() {
   async function unassign(a: SAssignment) { const { error } = await sb.rpc('social_unassign', { asg: a.id }); if (error) toast(errMsg(error)); else load() }
   async function del() {
     const { error } = await sb.from('social_projects').delete().eq('id', id!)
-    if (error) { toast('This project has submissions, so it was archived instead.'); await patch({ publication_status: 'archived' } as Partial<Project>) }
+    if (error) { toast('This shot has videos sent for it, so it was archived instead.'); await patch({ publication_status: 'archived' } as Partial<Project>) }
     nav('/agency/socials')
   }
 
@@ -188,18 +175,20 @@ export default function ProjectEditor() {
       <label className="field"><span>Title (creators see this)</span><input id="pj-title" className="input" value={f.title} maxLength={160} onChange={e => set('title', e.target.value)} /></label>
       <div className="grid2">
         <label className="field"><span>Section</span><select className="select" value={f.section_id} onChange={e => set('section_id', e.target.value)}>{sections.map(s => <option key={s.id} value={s.id}>{s.typeName} · {s.title}</option>)}</select></label>
-        <label className="field"><span>Processing</span><select className="select" value={f.mode} disabled={p.publication_status === 'published'} onChange={e => set('mode', e.target.value as Mode)}>{(Object.keys(MODE_LABEL) as Mode[]).map(m => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></label>
+        <label className="field"><span>Type</span><select className="select" value={f.mode} disabled={p.publication_status === 'published'} onChange={e => set('mode', e.target.value as Mode)}>{(Object.keys(MODE_LABEL) as Mode[]).map(m => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></label>
       </div>
-      {p.publication_status === 'published' && <p className="muted" style={{ fontSize: 13 }}>Unpublish to change the processing type.</p>}
+      {p.publication_status === 'published' && <p className="muted" style={{ fontSize: 13 }}>Unpublish to change the type.</p>}
       <label className="field"><span>Short description (optional, creators see this)</span><input id="pj-desc" className="input" value={f.description} onChange={e => set('description', e.target.value)} /></label>
     </section>
 
     <section className="card stack"><h3>Reference video</h3>
       <label className="field"><span>Instagram, TikTok, YouTube or direct video link</span>
-        <div className="row"><input id="pj-url" className="input grow" value={f.url} onChange={e => set('url', e.target.value)} placeholder="https://www.instagram.com/reel/…" inputMode="url" />
+        <div className="row"><input id="pj-url" className="input grow" value={f.url} onChange={e => set('url', e.target.value)} placeholder="https://www.instagram.com/reel/…" inputMode="url"
+            onBlur={() => { const u = f.url.trim(); if (u && u !== (p.reference_url || '') && parseRef(u) && !p.ref_video_path && !busy) runImport() }} />
           <button className="btn ghost" disabled={busy || !f.url.trim()} onClick={runImport}>{p.import_status === 'importing' ? 'Importing…' : 'Import'}</button></div></label>
       <div className="row wrap"><button className="btn sm ghost" disabled={busy} onClick={chooseFile}>{p.ref_video_path ? 'Replace with a file' : 'Upload video file'}</button>
         <span className="muted" style={{ fontSize: 13 }}>MP4, MOV or WEBM · up to 500 MB and 10 minutes</span></div>
+      {caps && <p className="muted" style={{ fontSize: 13 }}>{caps.link_import ? 'Instagram and TikTok links download automatically.' : 'Instagram and TikTok links show as an embedded player. Upload the file to get the script and sound.'} {caps.transcripts ? 'Scripts are written out automatically.' : 'Scripts are written out on a computer, not on a phone.'}</p>}
       {upPct !== null && <div className="stack" style={{ gap: 4 }}><div className="bar"><i style={{ width: upPct + '%' }} /></div><span className="mono muted">Uploading {upPct}%</span></div>}
 
       {showWarning && <div className="warnbox" role="alert">
@@ -212,7 +201,6 @@ export default function ProjectEditor() {
           <button className="btn ghost" onClick={async () => { await patch({ import_status: 'link_only' } as Partial<Project>); toast(ref?.embed ? 'Saved. Creators will see the embedded player.' : 'Saved as a link only.') }}>Keep Link Only / Save Draft</button></div>
         {usesAudio(p.mode) && <p className="muted" style={{ fontSize: 13 }}>Dance and lip-sync shots need an uploaded file to play the sound during recording.</p>}
       </div>}
-      {p.import_status === 'link_only' && !p.ref_video_path && <p className="muted" style={{ fontSize: 13 }}>{ref?.embed ? `Creators see the official ${ref.label} player.` : 'Creators get a button that opens this link.'} No file is stored, so there's no transcript or sound extraction.</p>}
 
       {(p.ref_video_path || ref?.embed) && <div className="refprev"><ShotRefPreview p={p} url={p.ref_video_path ? urls[p.ref_video_path] : null} /></div>}
       {p.ref_video_path && <div className="statusgrid">
@@ -226,7 +214,7 @@ export default function ProjectEditor() {
 
     {usesScript(f.mode) && <section className="card stack">
       <div className="between wrap"><h3>Script</h3>{p.transcript_approved && f.script === p.script ? <span className="pill ok">Approved</span> : <span className="pill wait">Not approved</span>}</div>
-      <p className="muted" style={{ fontSize: 13.5 }}>{p.transcript_status === 'ready' ? 'Generated from the reference. Speech-to-text makes mistakes, so read it and fix anything before approving.' : 'Type the lines the creator should say, or upload the reference to generate them.'}</p>
+      <p className="muted" style={{ fontSize: 13.5 }}>{p.transcript_status === 'ready' ? 'Written out from the reference. Speech-to-text makes mistakes, so read it and fix anything before approving.' : p.transcript_status === 'failed' ? (p.transcript_error || 'The script could not be written out automatically.') + ' You can type it here.' : 'Type the lines the creator should say, or add the reference video to have them written out for you.'}</p>
       <textarea id="pj-script" className="textarea" rows={5} value={f.script} onChange={e => set('script', e.target.value)} />
       {p.transcript_raw && p.transcript_raw.length > 0 && <details><summary className="link">Timestamps from the reference</summary>
         <div className="segs-list">{p.transcript_raw.map((s, i) => <div key={i}><span className="mono muted">{fmtDur(s.start)}</span> {s.text}</div>)}</div></details>}
@@ -257,13 +245,13 @@ export default function ProjectEditor() {
       <p className="muted" style={{ fontSize: 13 }}>Each creator gets their own progress and submissions. They only see this once it's published.</p>
     </section>
 
-    <p className="muted" style={{ fontSize: 13 }}><button className="link" onClick={() => setConfirmDelete(true)}>Delete this project</button></p>
+    <p className="muted" style={{ fontSize: 13 }}><button className="link" onClick={() => setConfirmDelete(true)}>Delete this shot</button></p>
     <input ref={fileIn} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm" hidden onChange={e => onFile(e.target.files?.[0])} />
 
     {confirmReplace && <Modal center title="Replace the reference?" onClose={() => setConfirmReplace(null)}>
       <p className="muted">The approved script and extracted sound come from the current reference. Replacing it means processing again and re-approving the script.</p>
       <div className="row"><button className="btn ghost grow" onClick={() => setConfirmReplace(null)}>Keep current</button><button className="btn primary grow" onClick={() => { const fn = confirmReplace; setConfirmReplace(null); fn() }}>Replace</button></div></Modal>}
-    {confirmDelete && <Modal center title="Delete this project?" onClose={() => setConfirmDelete(false)}>
+    {confirmDelete && <Modal center title="Delete this shot?" onClose={() => setConfirmDelete(false)}>
       <p className="muted">If creators already sent videos for it, it's archived instead so nothing they sent is lost.</p>
       <div className="row"><button className="btn ghost grow" onClick={() => setConfirmDelete(false)}>Keep</button><button className="btn danger grow" onClick={del}>Delete</button></div></Modal>}
     {preview && <Modal title="What creators see" onClose={() => setPreview(false)}>

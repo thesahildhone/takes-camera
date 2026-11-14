@@ -24,7 +24,7 @@ with sync_playwright() as pw:
     t = pg.inner_text('main'); check('Sections & shots' in pg.inner_text('aside') and 'Socials review' in pg.inner_text('aside'), 'agency nav has Socials entries')
     check('Dances' in t and 'Reference needs an upload' in t, 'sections and import warning listed')
     pg.locator('a', has_text='Instagram reference').click(); pg.wait_for_selector('text=Unable to import reference video', timeout=10000)
-    check(pg.locator('text=Upload Video File').count() == 1 and pg.locator('text=Retry Import').count() == 1 and pg.locator('text=Keep Link Only / Save Draft').count() == 1, 'import warning has all three actions')
+    check(pg.get_by_role('button', name='Upload Video File', exact=True).count() == 1 and pg.locator('text=Retry Import').count() == 1 and pg.locator('text=Keep Link Only / Save Draft').count() == 1, 'import warning has all three actions')
     check(pg.locator('#pj-url').input_value().startswith('https://www.instagram.com/reel/ABCdef123'), 'original URL kept after failed import')
     pg.screenshot(path='a2_editor.png', full_page=True)
     pg.get_by_role('button', name='Preview creator view').click(); pg.wait_for_selector('.preview-frame .shot-num'); check(True, 'creator preview renders'); pg.screenshot(path='a3_preview.png')

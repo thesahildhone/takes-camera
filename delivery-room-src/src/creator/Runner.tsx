@@ -70,8 +70,8 @@ export default function Runner() {
   useEffect(() => { const w = (e: BeforeUnloadEvent) => { if (busyUploads) e.preventDefault() }; window.addEventListener('beforeunload', w); return () => window.removeEventListener('beforeunload', w) }, [busyUploads])
 
   const openRR = useMemo(() => rr.filter(r => !r.resolved_at), [rr])
-  if (loading) return <div className="phone"><Loading /></div>
-  if (err || !a || idx === null) return <div className="phone"><ErrorBox msg={err} /><Link className="link" to="/creator">Back to assignments</Link></div>
+  if (loading) return <div className="phone soc of"><Loading /></div>
+  if (err || !a || idx === null) return <div className="phone soc of"><ErrorBox msg={err} /><Link className="link" to="/creator">Back to assignments</Link></div>
 
   const total = a.pages.length
   const wsName = creatorOf.find(w => w.id === a.workspace_id)?.name || 'Your agency'
@@ -129,7 +129,7 @@ export default function Runner() {
   </div>
 
   // OVERVIEW
-  if (idx === -1) return <div className="phone">
+  if (idx === -1) return <div className="phone soc of">
     {header}
     <div className="stack">
       <p className="eyebrow">{wsName} · {a.category_name || 'Assignment'}</p>
@@ -148,7 +148,7 @@ export default function Runner() {
   // REVIEW & SUBMIT
   if (idx === total) {
     const locked = !editableStatus
-    return <div className="phone">
+    return <div className="phone soc of">
       {header}{segs}
       <div className="stack" style={{ marginBottom: 14 }}><p className="eyebrow">{locked ? fmtDate(a.submitted_at) : 'Last step'}</p>
         <h1 className="ph-title">{a.status === 'approved' ? 'Approved' : locked ? 'Submitted' : 'Review & submit'}</h1>
@@ -171,7 +171,7 @@ export default function Runner() {
   const slots = slotsFor(p); const req = pageReq(p)
   const pageRR = openRR.filter(r => r.page_id === p.id)
   const next = idx + 1 < total ? 'Next: ' + a.pages[idx + 1].title : 'Review & submit'
-  return <div className="phone">
+  return <div className="phone soc of">
     {header}{segs}
     <div className="stack" style={{ gap: 6, marginBottom: 16 }}>
       <p className="eyebrow">Page {idx + 1} of {total}{p.kind === 'info' ? ' · Read first' : ''}</p>

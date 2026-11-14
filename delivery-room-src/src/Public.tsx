@@ -10,7 +10,7 @@ export function Welcome() {
   return <div className="public"><div className="box">
     <Brand />
     <h1>Briefs out, content in. No Drive links, no editing apps, no chasing.</h1>
-    <p className="muted">Agencies send step-by-step scripts. Creators film each section with built-in skin smoothing and every file lands in the right place, named and ready.</p>
+    <p className="muted">Agencies set up shots with a reference, a script and notes. Creators film them in the app, clip by clip, with built-in skin smoothing. Every video lands in one review queue, named and ready.</p>
     <div className="stack">
       <Link className="btn lg primary block" to="/auth?mode=signup&kind=business">I run an agency</Link>
       <Link className="btn lg ghost block" to="/auth?mode=signup&kind=creator">I'm a creator</Link>
@@ -32,8 +32,10 @@ export function AuthPage() {
     try {
       if (mode === 'signup') {
         if (!name.trim()) throw new Error('Add your name')
-        const { error } = await sb.auth.signUp({ email: email.trim(), password: pw, options: { data: { full_name: name.trim(), kind } } })
+        const { data: su, error } = await sb.auth.signUp({ email: email.trim(), password: pw, options: { data: { full_name: name.trim(), kind } } })
         if (error) throw error
+        // an email that already has an account comes back with no identities and no error
+        if (su.user && !su.user.identities?.length) throw new Error('An account with this email already exists. Sign in instead, or use a different email.')
         const { error: e2 } = await sb.auth.signInWithPassword({ email: email.trim(), password: pw })
         if (e2) throw e2
       } else {
@@ -52,7 +54,7 @@ export function AuthPage() {
     </div>}
     {mode === 'signup' && <label className="field"><span>Your name</span><input id="name" className="input" value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>}
     <label className="field"><span>Email</span><input id="email" className="input" type="email" required value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" /></label>
-    <label className="field"><span>Password</span><input id="password" className="input" type="password" required minLength={6} value={pw} onChange={e => setPw(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>
+    <label className="field"><span>Password</span><input id="password" className="input" type="password" required minLength={mode === 'signup' ? 8 : undefined} value={pw} onChange={e => setPw(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>
     <ErrorBox msg={err} />
     <button className="btn lg primary block" disabled={busy}>{busy ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
     <p className="muted" style={{ textAlign: 'center' }}>

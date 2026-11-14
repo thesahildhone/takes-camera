@@ -49,12 +49,13 @@ export default function Home() {
     {toggle}
     <SocialHome />
   </div>
-  return <div className="phone">
+  return <div className="phone soc of">
     <CTop />
+    <h1 className="soc-name">{profile?.full_name || 'Your sets'}</h1>
     {toggle}
     <div className="stack" style={{ marginBottom: 14 }}>
       <p className="eyebrow">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
-      <h1 style={{ fontSize: 28, lineHeight: 1.12 }}>{first ? `Hi ${first}, ` : ''}{counts.todo + counts.redo ? `you have ${counts.todo + counts.redo} to film.` : 'you\'re all caught up.'}</h1>
+      <h2 style={{ fontSize: 22, lineHeight: 1.15 }}>{counts.todo + counts.redo ? `${counts.todo + counts.redo} set${counts.todo + counts.redo === 1 ? '' : 's'} to film` : `${first ? first + ', you' : 'You'}'re all caught up`}</h2>
     </div>
     {creatorOf.length === 0 ? <div className="empty"><h3>You're not part of any agency yet</h3><p>Ask your agency for an invite link. When you open it, their assignments show up here.</p></div> : <>
       {creatorOf.length > 1 && <select className="select" aria-label="Agency" value={wsF} onChange={e => setWsF(e.target.value)} style={{ marginBottom: 10 }}><option value="all">All agencies</option>{creatorOf.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}

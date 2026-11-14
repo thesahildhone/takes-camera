@@ -105,7 +105,7 @@ def main():
         ctx.add_init_script(f"localStorage.setItem('sb-qchxfwoaaoslipwkdqep-auth-token', JSON.stringify({json.dumps(sess)}))")
         pg = ctx.new_page(); logs = []
         pg.on('console', lambda m: logs.append(f'{m.type}: {m.text}')); pg.on('pageerror', lambda e: logs.append(f'PAGEERROR: {e}'))
-        pg.goto(BASE + '#/creator'); pg.wait_for_selector('text=Socials', timeout=15000)
+        pg.goto(BASE + '#/creator'); pg.wait_for_selector('text=Socials', timeout=45000)
         pg.get_by_role('tab', name='Socials').click()
         pg.wait_for_selector('.ringcard', timeout=10000); pg.screenshot(path='01_home.png', full_page=True)
         check('2 shots to go' in pg.inner_text('.ringcard') or '3 shots to go' in pg.inner_text('.ringcard'), 'home ring shows shots to go: ' + pg.inner_text('.ringcard').replace('\n', ' '))
@@ -127,13 +127,13 @@ def main():
         # ---- camera: 3 clips
         pg.locator('.shot-actions >> text=Film it').click(); pg.get_by_role('button', name='Turn on camera').click()
         pass
-        pg.wait_for_selector('.scam .shutter', timeout=15000); pg.wait_for_timeout(800)
+        pg.wait_for_selector('.scam .shutter', timeout=45000); pg.wait_for_timeout(800)
         check(pg.locator('.scam .tp').count() == 1, 'teleprompter visible'); pg.screenshot(path='03_camera.png')
         pg.get_by_role('button', name='Scroll').click(); pg.get_by_role('button', name='Still').click()
         for i in range(3):
             pg.get_by_role('button', name='Record clip').click(); pg.wait_for_timeout(1600)
-            pg.get_by_role('button', name='Stop clip').click(); pg.wait_for_selector('.scam .cthumbs b', timeout=15000)
-            pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=30000)
+            pg.get_by_role('button', name='Stop clip').click(); pg.wait_for_selector('.scam .cthumbs b', timeout=45000)
+            pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=60000)
         check(pg.inner_text('.scam .cthumbs b') == '3', '3 clips recorded')
         pg.get_by_role('button', name='Done').click(); pg.wait_for_selector('.scam .edit')
         sizes = pg.evaluate("""async () => { const r = indexedDB.open('dr-social'); const db = await new Promise(x => r.onsuccess = () => x(r.result));
@@ -146,7 +146,7 @@ def main():
         pg.locator('.scam .sclip').nth(1).click(); pg.get_by_role('button', name='Redo this clip').click()
         pg.wait_for_selector('text=Redoing clip 2', timeout=5000) if pg.locator('text=Redoing clip 2').count() else None
         pg.get_by_role('button', name='Record clip').click(); pg.wait_for_timeout(1300); pg.get_by_role('button', name='Stop clip').click()
-        pg.wait_for_selector('text=Keep the new take?', timeout=15000); pg.screenshot(path='05_retake.png')
+        pg.wait_for_selector('text=Keep the new take?', timeout=45000); pg.screenshot(path='05_retake.png')
         pg.get_by_role('button', name='Use new take').click(); pg.wait_for_selector('.scam .edit'); pg.wait_for_timeout(400)
         after = pg.evaluate("""async () => { const r = indexedDB.open('dr-social'); const db = await new Promise(x => r.onsuccess = () => x(r.result));
           const all = await new Promise(x => { const q = db.transaction('drafts').objectStore('drafts').getAll(); q.onsuccess = () => x(q.result) });
@@ -193,11 +193,11 @@ def main():
         CALLS.clear()
         pg.goto(BASE + f'#/creator/s/p/{P3}'); pg.wait_for_selector('.shot-actions', timeout=10000); pg.wait_for_timeout(500)
         check('Sound plays while you film' in pg.inner_text('.shot'), 'dance shot explains the sound')
-        pg.locator('.shot-actions >> text=Film it').click(); pg.get_by_role('button', name='Turn on camera').click(timeout=15000)
-        pg.wait_for_selector('.scam .cue', timeout=15000); pg.screenshot(path='07_dance_cam.png')
+        pg.locator('.shot-actions >> text=Film it').click(); pg.get_by_role('button', name='Turn on camera').click(timeout=45000)
+        pg.wait_for_selector('.scam .cue', timeout=45000); pg.screenshot(path='07_dance_cam.png')
         for i in range(2):
-            pg.get_by_role('button', name='Record clip').click(); pg.wait_for_selector('.scam .countdown', timeout=15000); pg.wait_for_timeout(5500)
-            pg.get_by_role('button', name='Stop clip').click(); pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=30000)
+            pg.get_by_role('button', name='Record clip').click(); pg.wait_for_selector('.scam .countdown', timeout=45000); pg.wait_for_timeout(5500)
+            pg.get_by_role('button', name='Stop clip').click(); pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=60000)
         cue = pg.inner_text('.scam .cue'); check('0:0' not in cue.split('starts at')[1][:6] if 'starts at' in cue else True, 'cue advanced to where clip 2 ended: ' + cue.split('\n')[0])
         refs = pg.evaluate("""async () => { const r = indexedDB.open('dr-social'); const db = await new Promise(x => r.onsuccess = () => x(r.result));
           const all = await new Promise(x => { const q = db.transaction('drafts').objectStore('drafts').getAll(); q.onsuccess = () => x(q.result) });

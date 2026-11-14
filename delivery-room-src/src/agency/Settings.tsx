@@ -3,6 +3,7 @@ import { sb, errMsg } from '../lib/supabase'
 import { useAuth, useWs } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, useToast } from '../lib/ui'
 import { fmtBytes, fmtDate } from '../lib/types'
+import PasswordCard from '../components/PasswordCard'
 
 export default function Settings() {
   const { ws, isAdmin } = useWs(); const { refresh } = useAuth(); const toast = useToast()
@@ -28,7 +29,8 @@ export default function Settings() {
     </section>
     <section className="card stack"><h3>Usage</h3>
       <div className="stats"><div className="stat"><b>{fmtBytes(Number(data.usage?.bytes || 0))}</b><span>Stored</span></div><div className="stat"><b>{data.usage?.files || 0}</b><span>Files</span></div><div className="stat"><b>{data.usage?.creators || 0}</b><span>Active creators</span></div><div className="stat"><b>{data.usage?.assignments_open || 0}</b><span>Open assignments</span></div></div>
-      <p className="muted" style={{ fontSize: 13 }}>Plans and billing aren't switched on in this test build.</p></section>
+      <p className="muted" style={{ fontSize: 13 }}>Free during the trial.</p></section>
+    <PasswordCard />
     <section className="card stack"><h3>Labels</h3><p className="muted" style={{ fontSize: 13 }}>Group templates and assignments, e.g. Scripts, PPV, Reels. Add new ones from any template.</p>
       <div className="list">{data.cats.map(c => <div key={c.id} className="row"><input className="input" aria-label="Label name" defaultValue={c.name} disabled={!isAdmin} onBlur={e => e.target.value !== c.name && renameCat(c.id, e.target.value)} />{isAdmin && <button className="btn sm danger" onClick={() => delCat(c.id)}>Remove</button>}</div>)}</div></section>
     {isAdmin && <section className="card stack"><h3>Activity log</h3>

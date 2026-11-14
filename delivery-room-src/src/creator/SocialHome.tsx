@@ -4,6 +4,7 @@ import { sb } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { useAsync, Loading, ErrorBox } from '../lib/ui'
 import { IcPlus } from '../lib/icons'
+import { dueLabel } from '../lib/types'
 import { isSent, isToFilm, pad2, parseRef, SA_LABEL, SA_TONE, usesAudio, usesScript, type ContentType, type Project, type SAssignment, type Section } from '../lib/social'
 
 export interface SocialData { types: ContentType[]; sections: Section[]; projects: Project[]; asg: SAssignment[]; sentWeek: Set<string> }
@@ -53,7 +54,7 @@ export default function SocialHome() {
 
   if (loading) return <Loading />
   if (error) return <ErrorBox msg={error} />
-  if (!d || !d.asg.length) return <div className="empty"><h3>No Socials shots yet</h3><p>When your agency assigns reels, stories or carousels to you, they show up here.</p></div>
+  if (!d || !d.asg.length) return <div className="empty"><h3>{creatorOf.length ? 'No Socials shots yet' : "You're not part of an agency yet"}</h3><p>{creatorOf.length ? 'When your agency assigns reels, stories or carousels to you, they show up here.' : 'Ask your agency for an invite link and open it on this phone. Their shots show up here.'}</p></div>
 
   const countsFor = (tid: string) => { const list = d.sections.filter(s => s.content_type_id === tid).flatMap(s => shotsIn(d, s.id)); return { total: list.length, toFilm: list.filter(x => isToFilm(x.a.status)).length, sent: list.filter(x => isSent(x.a.status)).length } }
   const c = typeId ? countsFor(typeId) : { total: 0, toFilm: 0, sent: 0 }
@@ -83,7 +84,8 @@ export default function SocialHome() {
           <span className="grow"><b>{p.title}</b><span className="tags">
             {a.status !== 'not_started' && <span className={'pill ' + SA_TONE[a.status]}>{SA_LABEL[a.status]}</span>}
             {usesScript(p.mode) && <span className="tag">Script</span>}{usesAudio(p.mode) && p.audio_status === 'ready' && <span className="tag">Sound</span>}
-            {r && r.platform !== 'file' && r.platform !== 'other' && <span className="tag dim">{r.label}</span>}</span></span>
+            {r && r.platform !== 'file' && r.platform !== 'other' && <span className="tag dim">{r.label}</span>}
+            {a.due_at && isToFilm(a.status) && <span className={'duechip' + (new Date(a.due_at) < new Date() ? ' late' : '')}>{dueLabel(a.due_at)}</span>}</span></span>
           <span className="chev">›</span></Link> })}</div>
     </>}
   </div>

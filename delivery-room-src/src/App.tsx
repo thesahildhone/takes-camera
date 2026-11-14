@@ -22,7 +22,6 @@ function Guard({ children }: { children: JSX.Element }) {
 }
 export default function App() {
   return <AuthProvider><ToastProvider>
-    <div className="banner">Test build. Please don't upload real client content yet.</div>
     <HashRouter>
       <Routes>
         <Route path="/" element={<Home />} />

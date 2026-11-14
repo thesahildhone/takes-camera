@@ -78,3 +78,14 @@ export function thumbAt(blob: Blob, t = 0.1): Promise<string | null> {
     v.src = url
   })
 }
+
+/** 16-bit mono WAV from raw samples (used to send speech to the transcript service). */
+export function pcmToWav(pcm: Float32Array, rate: number): Blob {
+  const out = new DataView(new ArrayBuffer(44 + pcm.length * 2))
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)) }
+  w(0, 'RIFF'); out.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ')
+  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, rate, true)
+  out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, pcm.length * 2, true)
+  for (let i = 0, o = 44; i < pcm.length; i++, o += 2) { const v = Math.max(-1, Math.min(1, pcm[i])); out.setInt16(o, v < 0 ? v * 0x8000 : v * 0x7fff, true) }
+  return new Blob([out.buffer], { type: 'audio/wav' })
+}

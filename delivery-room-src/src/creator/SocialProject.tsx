@@ -7,7 +7,7 @@ import { uploadObject } from '../lib/upload'
 import { decodeAudio, videoMeta } from '../lib/media'
 import { assemble, primeAssembler } from '../lib/assemble'
 import { dropDraft, loadDraft, ordered, saveDraft, clipLen, type Draft, draftKey } from '../lib/drafts'
-import { fmtDate } from '../lib/types'
+import { dueLabel, fmtDate } from '../lib/types'
 import { fmtDur, isToFilm, signed, usesAudio, type Project, type SAssignment, type Section, type Submission } from '../lib/social'
 import ShotView from '../components/ShotView'
 import SocialCamera from '../components/SocialCamera'
@@ -25,7 +25,7 @@ export default function SocialProject() {
   const [urls, setUrls] = useState<Record<string, string>>({}); const [err, setErr] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [cam, setCam] = useState(false); const [audio, setAudio] = useState<AudioBuffer | null>(null); const [opening, setOpening] = useState(false)
-  const [review, setReview] = useState<Draft | null>(null); const [sending, setSending] = useState<Sending | null>(null)
+  const [review, setReview] = useState<Draft | null>(null); const [sending, setSending] = useState<Sending | null>(null); const [note, setNote] = useState('')
   const fileIn = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -99,10 +99,10 @@ export default function SocialProject() {
       const mix = o.mix ? await put('mix', o.mix, 'Uploading video 2 of 2 (with music)…') : null
       setSending({ stage: 'Confirming with your agency…', pct: 100 })
       const { error } = await sb.rpc('social_submit', { sub_id: o.subId, asg: a!.id, clean, mix, mix_note: o.mixNote, m: o.clean.type || 'video/mp4', sz: o.clean.size,
-        dur: Math.round(o.duration * 10) / 10, w: o.width || null, h: o.height || null, sm: o.smoothing, clips: o.clips || null, src: o.source, meta: { mix_size: o.mix?.size ?? null } })
+        dur: Math.round(o.duration * 10) / 10, w: o.width || null, h: o.height || null, sm: o.smoothing, clips: o.clips || null, src: o.source, meta: { mix_size: o.mix?.size ?? null, ...(note.trim() ? { note: note.trim().slice(0, 500) } : {}) } })
       if (error) throw error
       await dropDraft(a!.id)
-      setSending(null); setReview(null); setDraft(null); toast('Sent to your agency'); load()
+      setSending(null); setReview(null); setDraft(null); setNote(''); toast('Sent to your agency'); load()
     } catch (e) {
       setSending({ stage: 'Not sent', pct: 0, err: errMsg(e) })
       setDraft(cur); setReview(cur)
@@ -112,7 +112,8 @@ export default function SocialProject() {
   const status = latest?.status === 'revision_requested' && a.status === 'revision_requested'
     ? <div className="redo-note soc-note"><b>Redo requested</b>{latest.review_note ? ` — ${latest.review_note}` : ''}</div>
     : a.status === 'submitted' ? <div className="soc-note ok">Sent {fmtDate(latest?.created_at || null)}. Waiting for review.</div>
-    : a.status === 'approved' ? <div className="soc-note ok"><b>Approved</b>{latest?.review_note ? ` — ${latest.review_note}` : ''}</div> : null
+    : a.status === 'approved' ? <div className="soc-note ok"><b>Approved</b>{latest?.review_note ? ` — ${latest.review_note}` : ''}</div>
+    : a.due_at ? <div className={'soc-note' + (new Date(a.due_at) < new Date() ? ' late' : '')}>{dueLabel(a.due_at)}</div> : null
 
   return <div className="phone soc">
     <ShotView p={p} sectionName={sec?.title || 'Back'} index={pos.i} total={pos.n} status={a.status}
@@ -136,6 +137,7 @@ export default function SocialProject() {
       <ReviewMedia d={review} />
       <p className="smuted" style={{ fontSize: 13.5 }}>{review.out?.source === 'upload' ? 'From your camera roll.' : `${ordered(review).length} clip${ordered(review).length === 1 ? '' : 's'} joined in order · ${fmtDur(ordered(review).reduce((n, c) => n + clipLen(c), 0))}.`}
         {usesAudio(p.mode) && (p.rights_status === 'licensed' && dance ? ' Your agency gets a clean copy and one with the music.' : ' Your agency gets a clean copy without the music.')}</p>
+      {(!sending || sending.err) && <label className="field"><span>Note for your agency (optional)</span><input className="input" value={note} maxLength={500} onChange={e => setNote(e.target.value)} placeholder="Anything they should know about this take" /></label>}
       {sending && <div className="stack" style={{ gap: 6 }} role="status">
         <div className="between"><b>{sending.err ? "Didn't send" : sending.stage}</b>{!sending.err && <span className="mono">{sending.pct}%</span>}</div>
         {!sending.err && <div className="bar"><i style={{ width: sending.pct + '%' }} /></div>}

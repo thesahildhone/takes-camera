@@ -4,6 +4,7 @@ import { sb, errMsg } from '../lib/supabase'
 import { useWs } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, useToast, Modal } from '../lib/ui'
 import { IcDown, IcUp, IcPlus } from '../lib/icons'
+import { BulkAdd, AssignSection, type CreatorOpt } from './SectionTools'
 import { MODE_LABEL, pad2, readyProblem, type ContentType, type Project, type SAssignment, type Section } from '../lib/social'
 
 const TYPE_KEY = 'dr.soc.type'
@@ -14,16 +15,19 @@ export default function Socials() {
   const [typeId, setTypeId] = useState<string | null>(() => { try { return localStorage.getItem(TYPE_KEY) } catch { return null } })
   const [edit, setEdit] = useState<Edit>(null); const [title, setTitle] = useState(''); const [desc, setDesc] = useState('')
   const [showArchived, setShowArchived] = useState(false); const [busy, setBusy] = useState(false)
+  const [bulk, setBulk] = useState<Section | null>(null); const [assign, setAssign] = useState<Section | null>(null)
   const { data, loading, error, reload } = useAsync(async () => {
     await sb.rpc('social_bootstrap', { ws: ws!.id })
-    const [t, s, p, a] = await Promise.all([
+    const [t, s, p, a, c] = await Promise.all([
       sb.from('social_content_types').select('*').eq('workspace_id', ws!.id).order('position'),
       sb.from('social_sections').select('*').eq('workspace_id', ws!.id).order('position'),
       sb.from('social_projects').select('*').eq('workspace_id', ws!.id).order('position'),
       sb.from('social_assignments').select('id,project_id,status').eq('workspace_id', ws!.id).neq('status', 'cancelled'),
+      sb.from('creator_memberships').select('creator_id,profiles(full_name,email)').eq('workspace_id', ws!.id).eq('status', 'active'),
     ])
+    const creators: CreatorOpt[] = ((c.data || []) as unknown as { creator_id: string; profiles: { full_name: string; email: string } | null }[]).map(x => ({ id: x.creator_id, name: x.profiles?.full_name || x.profiles?.email || 'Creator' }))
     if (t.error) throw t.error; if (s.error) throw s.error; if (p.error) throw p.error
-    return { types: t.data as ContentType[], sections: s.data as Section[], projects: p.data as Project[], asg: (a.data || []) as Pick<SAssignment, 'id' | 'project_id' | 'status'>[] }
+    return { types: t.data as ContentType[], sections: s.data as Section[], projects: p.data as Project[], asg: (a.data || []) as Pick<SAssignment, 'id' | 'project_id' | 'status'>[], creators }
   }, [ws?.id])
   const types = useMemo(() => (data?.types || []).filter(t => showArchived || !t.archived_at), [data, showArchived])
   useEffect(() => { if (types.length && !types.some(t => t.id === typeId)) setTypeId(types[0].id) }, [types, typeId])
@@ -55,7 +59,7 @@ export default function Socials() {
     setBusy(false); if (e) return toast(errMsg(e)); setEdit(null); reload()
   }
   async function archiveSection(s: Section) { const { error } = await sb.from('social_sections').update({ archived_at: s.archived_at ? null : new Date().toISOString() }).eq('id', s.id); if (error) toast(errMsg(error)); else { toast(s.archived_at ? 'Restored' : 'Archived. Creators no longer see it.'); reload() } }
-  async function deleteSection(s: Section) { const { error } = await sb.from('social_sections').delete().eq('id', s.id); if (error) toast('Only empty sections can be deleted. Move or delete its projects first.'); else { toast('Deleted'); reload() } }
+  async function deleteSection(s: Section) { const { error } = await sb.from('social_sections').delete().eq('id', s.id); if (error) toast('Only empty sections can be deleted. Move or delete its shots first.'); else { toast('Deleted'); reload() } }
   async function addProject(s: Section) {
     const { data: row, error } = await sb.from('social_projects').insert({ workspace_id: ws!.id, section_id: s.id, title: 'New shot', position: projectsOf(s.id).length, mode: 'talking' }).select('id').single()
     if (error) return toast(errMsg(error)); nav('/agency/socials/p/' + row.id)
@@ -65,11 +69,15 @@ export default function Socials() {
     const { error } = await sb.from('social_projects').update({ section_id: to, position: n }).eq('id', p.id)
     if (error) toast(errMsg(error)); else { toast('Moved. Submissions stay attached.'); reload() }
   }
+  async function publishReady(s: Section) {
+    const { data: n, error } = await sb.rpc('social_publish_ready', { sec: s.id })
+    if (error) return toast(errMsg(error)); toast(`${n} shot${n === 1 ? '' : 's'} published`); reload()
+  }
   const allSections = data.sections.filter(s => !s.archived_at)
   const typeName = (id: string) => data.types.find(t => t.id === id)?.name || ''
 
   return <>
-    <div className="page-title"><div><h1>Socials</h1><p className="muted" style={{ marginTop: 4 }}>Your sections and shots. Creators only see what you publish and assign to them.</p></div>
+    <div className="page-title"><div><h1>Socials</h1><p className="muted" style={{ marginTop: 4 }}>Creators only see shots you've published and assigned to them.</p></div>
       <div className="row wrap"><label className="check"><input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />Show archived</label>
         <Link className="btn ghost" to="/agency/social-review">Review inbox</Link></div></div>
 
@@ -80,21 +88,27 @@ export default function Socials() {
     </div>
 
     {sections.length === 0 && <div className="empty"><h3>No sections in {typeName(typeId || '')} yet</h3><p>Sections are your own groups, for example "Talking heads" or "Dances". Name them however you like.</p></div>}
-    {sections.map((s, i) => { const ps = projectsOf(s.id)
+    {sections.map((s, i) => { const ps = projectsOf(s.id), nReady = ps.filter(p => p.publication_status === 'draft' && !readyProblem(p)).length
       return <section key={s.id} className="card stack" style={{ opacity: s.archived_at ? .6 : 1 }}>
-        <div className="between wrap">
+        <div className="sec-head">
           <div className="grow"><h3>{s.title}{s.archived_at ? ' · archived' : ''}</h3>{s.description && <p className="muted" style={{ fontSize: 13.5 }}>{s.description}</p>}</div>
           <div className="row wrap" style={{ gap: 6 }}>
-            <button className="icon-btn" aria-label={`Move ${s.title} up`} disabled={i === 0} onClick={() => swap('social_sections', sections, i, -1)}><IcUp /></button>
-            <button className="icon-btn" aria-label={`Move ${s.title} down`} disabled={i === sections.length - 1} onClick={() => swap('social_sections', sections, i, 1)}><IcDown /></button>
-            <button className="btn sm ghost" onClick={() => { setTitle(s.title); setDesc(s.description); setEdit({ kind: 'section', s }) }}>Edit</button>
-            <button className="btn sm ghost" onClick={() => archiveSection(s)}>{s.archived_at ? 'Restore' : 'Archive'}</button>
-            {ps.length === 0 && <button className="btn sm ghost" onClick={() => deleteSection(s)}>Delete</button>}
-            <button className="btn sm primary" onClick={() => addProject(s)}><IcPlus />Add project</button>
+            {nReady > 0 && <button className="btn sm ghost" onClick={() => publishReady(s)}>Publish {nReady} ready</button>}
+            <button className="btn sm ghost" onClick={() => setAssign(s)}>Assign</button>
+            <button className="btn sm ghost" onClick={() => setBulk(s)}>Add from links</button>
+            <button className="btn sm primary" onClick={() => addProject(s)}><IcPlus />Add shot</button>
           </div>
         </div>
-        {ps.length === 0 ? <p className="muted" style={{ fontSize: 13.5 }}>No projects yet.</p> :
-          <div className="scroll-x"><table className="table"><thead><tr><th>#</th><th>Project</th><th>Mode</th><th>Status</th><th>Creators</th><th>Section</th><th /></tr></thead><tbody>
+        <div className="sec-tools">
+          {(s as Section & { auto_assign?: boolean }).auto_assign && <span className="pill ok">Assigned to everyone</span>}
+          <button className="link" onClick={() => { setTitle(s.title); setDesc(s.description); setEdit({ kind: 'section', s }) }}>Rename</button>
+          <button className="link" onClick={() => archiveSection(s)}>{s.archived_at ? 'Restore' : 'Archive'}</button>
+          {ps.length === 0 && <button className="link" onClick={() => deleteSection(s)}>Delete</button>}
+          <button className="link" disabled={i === 0} onClick={() => swap('social_sections', sections, i, -1)}>Move up</button>
+          <button className="link" disabled={i === sections.length - 1} onClick={() => swap('social_sections', sections, i, 1)}>Move down</button>
+        </div>
+        {ps.length === 0 ? <p className="muted" style={{ fontSize: 13.5 }}>No shots yet. Add one, or paste a list of links.</p> :
+          <div className="scroll-x"><table className="table shots"><thead><tr><th>#</th><th>Shot</th><th>Type</th><th>Status</th><th>Creators</th><th>Section</th><th /></tr></thead><tbody>
             {ps.map((p, k) => { const a = asgOf(p.id), sent = a.filter(x => x.status === 'submitted' || x.status === 'approved').length, why = readyProblem(p)
               return <tr key={p.id}>
                 <td className="mono">{pad2(k + 1)}</td>
@@ -112,6 +126,8 @@ export default function Socials() {
       </section> })}
     {typeId && <button className="btn ghost" onClick={() => { setTitle(''); setDesc(''); setEdit({ kind: 'section', s: null }) }}><IcPlus />New section in {typeName(typeId)}</button>}
 
+    {bulk && <BulkAdd section={bulk} startAt={projectsOf(bulk.id).length} onClose={ch => { setBulk(null); if (ch) reload() }} />}
+    {assign && <AssignSection section={assign} creators={data.creators} shotCount={projectsOf(assign.id).filter(p => p.publication_status !== 'archived').length} onClose={ch => { setAssign(null); if (ch) reload() }} />}
     {edit && <Modal center title={edit.kind === 'section' ? (edit.s ? 'Edit section' : 'New section') : (edit.t ? 'Rename content type' : 'New content type')} onClose={() => setEdit(null)}>
       <label className="field"><span>{edit.kind === 'section' ? 'Section name' : 'Name'}</span><input id="sec-title" className="input" value={title} maxLength={edit.kind === 'section' ? 60 : 40} onChange={e => setTitle(e.target.value)} placeholder={edit.kind === 'section' ? 'e.g. Talking heads' : 'e.g. Reels'} autoFocus /></label>
       {edit.kind === 'section' && <label className="field"><span>Description (creators see this)</span><textarea id="sec-desc" className="textarea" value={desc} onChange={e => setDesc(e.target.value)} /></label>}

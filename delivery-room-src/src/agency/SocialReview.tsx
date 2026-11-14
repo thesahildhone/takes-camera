@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { sb, errMsg } from '../lib/supabase'
 import { useWs } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, useToast, Modal } from '../lib/ui'
@@ -55,17 +55,17 @@ export function SocialInbox() {
   const set = (k: keyof typeof fl, v: string | boolean) => setFl(x => ({ ...x, [k]: v }))
 
   return <>
-    <div className="page-title"><div><h1>Socials review</h1><p className="muted" style={{ marginTop: 4 }}>Every video creators send for your Socials shots.</p></div><Link className="btn ghost" to="/agency/socials">Sections & projects</Link></div>
+    <div className="page-title"><div><h1>Socials review</h1><p className="muted" style={{ marginTop: 4 }}>Every video creators send for your Socials shots.</p></div><Link className="btn ghost" to="/agency/socials">Sections & shots</Link></div>
     <div className="filters">
       <select className="select" aria-label="Status" value={fl.status} onChange={e => set('status', e.target.value)}><option value="">Any status</option><option value="submitted">Waiting for review</option><option value="revision_requested">Redo requested</option><option value="approved">Approved</option></select>
       <select className="select" aria-label="Creator" value={fl.creator} onChange={e => set('creator', e.target.value)}><option value="">All creators</option>{creators.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
       <select className="select" aria-label="Content type" value={fl.type} onChange={e => setFl(x => ({ ...x, type: e.target.value, section: '', project: '' }))}><option value="">All content types</option>{S?.types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
       <select className="select" aria-label="Section" value={fl.section} onChange={e => setFl(x => ({ ...x, section: e.target.value, project: '' }))}><option value="">All sections</option>{S?.sections.filter(s => !fl.type || s.content_type_id === fl.type).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select>
-      <select className="select" aria-label="Project" value={fl.project} onChange={e => set('project', e.target.value)}><option value="">All projects</option>{S?.projects.filter(p => (!fl.section || p.section_id === fl.section) && (!fl.type || sec(p.section_id)?.content_type_id === fl.type)).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
+      <select className="select" aria-label="Shot" value={fl.project} onChange={e => set('project', e.target.value)}><option value="">All shots</option>{S?.projects.filter(p => (!fl.section || p.section_id === fl.section) && (!fl.type || sec(p.section_id)?.content_type_id === fl.type)).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
       <label className="check"><input type="checkbox" checked={fl.latest} onChange={e => set('latest', e.target.checked)} />Latest version only</label>
     </div>
     {rows.length === 0 ? <div className="empty"><h3>Nothing here</h3><p>{fl.status === 'submitted' ? 'No videos are waiting for review.' : 'Try different filters.'}</p></div> :
-      <div className="scroll-x"><table className="table"><thead><tr><th>Creator</th><th>Project</th><th>Section</th><th>Version</th><th>Files</th><th>Sent</th><th>Status</th></tr></thead><tbody>
+      <div className="scroll-x"><table className="table"><thead><tr><th>Creator</th><th>Shot</th><th>Section</th><th>Version</th><th>Files</th><th>Sent</th><th>Status</th></tr></thead><tbody>
         {rows.map(r => { const p = proj(r.project_id), s = sec(p?.section_id), t = S?.types.find(x => x.id === s?.content_type_id)
           return <tr key={r.id}><td><Link className="link" to={'/agency/social-review/' + r.id}><b>{r.profiles?.full_name || 'Creator'}</b></Link></td>
             <td>{p?.title || '—'}</td><td className="muted">{t?.name} · {s?.title}</td><td className="mono">v{r.version}</td>
@@ -79,7 +79,7 @@ function saveFrom(url: string, name: string) { const a = document.createElement(
 const clean = (s: string) => s.replace(/[^A-Za-z0-9]+/g, '').slice(0, 40) || 'Item'
 
 export function SocialReviewDetail() {
-  const { id } = useParams(); const { ws } = useWs(); const toast = useToast()
+  const { id } = useParams(); const { ws } = useWs(); const toast = useToast(); const nav = useNavigate()
   const st = useStructure(ws!.id)
   const [urls, setUrls] = useState<Record<string, string>>({}); const [act, setAct] = useState<null | 'approve' | 'revise'>(null); const [note, setNote] = useState(''); const [busy, setBusy] = useState(false)
   const { data, loading, error, reload } = useAsync(async () => {
@@ -89,19 +89,24 @@ export function SocialReviewDetail() {
       sb.from('social_submissions').select('*').eq('assignment_id', s.assignment_id).order('version', { ascending: false }),
       sb.from('profiles').select('full_name,email').eq('id', s.creator_id).maybeSingle(),
     ])
-    return { s: s as Submission, history: (h.data || []) as Submission[], creator: pr.data?.full_name || pr.data?.email || 'Creator' }
+    const q = await sb.from('social_submissions').select('id,assignment_id,created_at').eq('workspace_id', s.workspace_id).eq('status', 'submitted').order('created_at').limit(300)
+    const queue = ((q.data || []) as { id: string }[]).map(x => x.id)
+    return { s: s as Submission, history: (h.data || []) as Submission[], creator: pr.data?.full_name || pr.data?.email || 'Creator', queue }
   }, [id])
   useEffect(() => { if (data) signed(data.history.flatMap(h => [h.clean_path, h.mix_path])).then(setUrls) }, [data])
   if (loading || st.loading) return <Loading />
   if (error || !data) return <ErrorBox msg={error} />
-  const { s, history, creator } = data
+  const { s, history, creator, queue } = data
+  const qi = queue.indexOf(s.id), nextId = queue.find((x, i) => x !== s.id && i > qi) || queue.find(x => x !== s.id) || null
+  const cnote = typeof s.meta?.note === 'string' ? s.meta.note : ''
   const p = st.data?.projects.find(x => x.id === s.project_id), sec = st.data?.sections.find(x => x.id === p?.section_id), type = st.data?.types.find(x => x.id === sec?.content_type_id)
   const latest = history[0]?.id === s.id
   const base = `${clean(creator)}_${clean(type?.name || '')}_${clean(sec?.title || '')}_${clean(p?.title || '')}_v${s.version}`
   const ext = (path: string) => path.split('.').pop() || 'mp4'
   async function go() {
     setBusy(true); const { error } = await sb.rpc('social_review', { sub: s.id, act, note }); setBusy(false)
-    if (error) return toast(errMsg(error)); toast(act === 'approve' ? 'Approved' : 'Sent back to ' + creator); setAct(null); setNote(''); reload()
+    if (error) return toast(errMsg(error)); toast(act === 'approve' ? 'Approved' : 'Sent back to ' + creator); setAct(null); setNote('')
+    if (nextId) nav('/agency/social-review/' + nextId); else reload()
   }
   return <>
     <div className="page-title"><div><Link className="link" to="/agency/social-review">← Socials review</Link>
@@ -111,6 +116,8 @@ export function SocialReviewDetail() {
         {latest && s.status === 'submitted' && <><button className="btn ghost" onClick={() => setAct('revise')}>Request redo</button><button className="btn primary" onClick={() => setAct('approve')}>Approve</button></>}
         {latest && s.status !== 'submitted' && <button className="btn ghost" onClick={() => setAct(s.status === 'approved' ? 'revise' : 'approve')}>{s.status === 'approved' ? 'Request redo instead' : 'Approve instead'}</button>}</div></div>
     {!latest && <div className="notice">This is an older version. <Link className="link" to={'/agency/social-review/' + history[0].id}>Open the latest (v{history[0].version})</Link></div>}
+    {queue.length > 1 && s.status === 'submitted' && <p className="muted" style={{ fontSize: 13.5 }}>{qi + 1} of {queue.length} waiting. After you approve or send back, the next one opens. {nextId && <Link className="link" to={'/agency/social-review/' + nextId}>Skip</Link>}</p>}
+    {cnote && <div className="notice"><b>Note from {creator}:</b> {cnote}</div>}
     {s.review_note && <div className="notice"><b>{s.status === 'approved' ? 'Approval note' : 'Redo note'}:</b> {s.review_note}</div>}
     <div className="vgrid">
       <section className="card stack"><div className="between"><h3>Clean video</h3><span className="muted" style={{ fontSize: 13 }}>{p?.mode === 'dance' || p?.mode === 'both' ? 'No backing music' : 'As filmed'}</span></div>

@@ -14,6 +14,7 @@ import Settings from './Settings'
 import Socials from './Socials'
 import ProjectEditor from './ProjectEditor'
 import { SocialInbox, SocialReviewDetail } from './SocialReview'
+import AgencyInbox from './AgencyInbox'
 
 export default function AgencyApp() {
   const { staff, wsId, setWsId, profile, signOut } = useAuth()
@@ -21,12 +22,14 @@ export default function AgencyApp() {
   const [open, setOpen] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [socCount, setSocCount] = useState(0)
+  const [unread, setUnread] = useState(0)
   const loc = useLocation()
   useEffect(() => setOpen(false), [loc.pathname])
   useEffect(() => {
     if (!wsId) return
     sb.from('assignments').select('id', { count: 'exact', head: true }).eq('workspace_id', wsId).eq('status', 'submitted').then(r => setReviewCount(r.count || 0))
     sb.from('social_assignments').select('id', { count: 'exact', head: true }).eq('workspace_id', wsId).eq('status', 'submitted').then(r => setSocCount(r.count || 0))
+    sb.from('notifications').select('id', { count: 'exact', head: true }).eq('workspace_id', wsId).is('read_at', null).then(r => setUnread(loc.pathname === '/agency/inbox' ? 0 : r.count || 0))
   }, [wsId, loc.pathname])
   if (!staff.length) return <Navigate to="/setup" replace />
   if (!ws) return null
@@ -42,13 +45,14 @@ export default function AgencyApp() {
         : <div className="card tight"><p className="eyebrow">Workspace</p><p style={{ fontWeight: 650 }}>{ws.name}</p></div>}
       <nav>
         <NavLink to="/agency" end>Overview</NavLink>
+        <NavLink to="/agency/inbox">Notifications{unread > 0 && <span className="count">{unread}</span>}</NavLink>
         <p className="nav-h">Socials</p>
         <NavLink to="/agency/socials">Sections & shots</NavLink>
         <NavLink to="/agency/social-review">Socials review{socCount > 0 && <span className="count">{socCount}</span>}</NavLink>
         <p className="nav-h">OF</p>
-        <NavLink to="/agency/review">Review{reviewCount > 0 && <span className="count">{reviewCount}</span>}</NavLink>
-        <NavLink to="/agency/assignments">Assignments</NavLink>
-        <NavLink to="/agency/templates">Templates</NavLink>
+        <NavLink to="/agency/review">OF review{reviewCount > 0 && <span className="count">{reviewCount}</span>}</NavLink>
+        <NavLink to="/agency/assignments">Sent sets</NavLink>
+        <NavLink to="/agency/templates">Set templates</NavLink>
         <NavLink to="/agency/schedules">Schedules</NavLink>
         <p className="nav-h">Workspace</p>
         <NavLink to="/agency/creators">Creators</NavLink>
@@ -73,6 +77,7 @@ export default function AgencyApp() {
         <Route path="socials/p/:id" element={<ProjectEditor />} />
         <Route path="social-review" element={<SocialInbox />} />
         <Route path="social-review/:id" element={<SocialReviewDetail />} />
+        <Route path="inbox" element={<AgencyInbox />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/agency" replace />} />
       </Routes>

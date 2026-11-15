@@ -32,7 +32,7 @@ export default function AgencyApp() {
     sb.from('social_assignments').select('id', { count: 'exact', head: true }).eq('workspace_id', wsId).eq('status', 'submitted').then(r => setSocCount(r.count || 0))
     sb.from('notifications').select('id', { count: 'exact', head: true }).eq('workspace_id', wsId).is('read_at', null).then(r => setUnread(loc.pathname === '/agency/inbox' ? 0 : r.count || 0))
   }, [wsId, loc.pathname])
-  if (!staff.length) return <Navigate to="/setup" replace />
+  if (!staff.length) return <Navigate to={profile?.kind === 'creator' ? '/creator' : '/setup'} replace />
   if (!ws) return null
   return <div className="shell">
     <div className="mobile-top">

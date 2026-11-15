@@ -65,9 +65,9 @@ export function AuthPage() {
 }
 
 export function SetupPage() {
-  const nav = useNavigate(); const { refresh, setWsId, staff } = useAuth()
+  const nav = useNavigate(); const { refresh, setWsId, staff, profile } = useAuth()
   const [name, setName] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null)
-  useEffect(() => { if (staff.length) nav('/agency', { replace: true }) }, [staff, nav])
+  useEffect(() => { if (staff.length) nav('/agency', { replace: true }); else if (profile?.kind === 'creator') nav('/creator', { replace: true }) }, [staff, profile, nav])
   async function submit(e: FormEvent) {
     e.preventDefault(); setBusy(true); setErr(null)
     const { data, error } = await sb.rpc('create_workspace', { ws_name: name })

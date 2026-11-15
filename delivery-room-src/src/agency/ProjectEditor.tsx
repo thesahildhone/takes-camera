@@ -164,7 +164,7 @@ export default function ProjectEditor() {
   const busy = !!stage || upPct !== null
 
   return <>
-    <div className="page-title"><div><Link className="link" to="/agency/socials">← Socials</Link>
+    <div className="page-title"><div><Link className="link" to={'/agency/socials/s/' + p.section_id}>← {sectionName || 'Section'}</Link>
       <h1 style={{ marginTop: 6 }}>{p.title}</h1>
       <p className="muted" style={{ marginTop: 4 }}>{sectionName} · {MODE_LABEL[p.mode]} · {p.publication_status === 'published' ? `published ${fmtDate(p.published_at)}` : p.publication_status}</p></div>
       <div className="row wrap">

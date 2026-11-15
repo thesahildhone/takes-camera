@@ -49,7 +49,7 @@ export default function Home() {
     {toggle}
     <SocialHome />
   </div>
-  return <div className="phone soc of">
+  return <div className="phone soc">
     <CTop />
     <h1 className="soc-name">{profile?.full_name || 'Your sets'}</h1>
     {toggle}

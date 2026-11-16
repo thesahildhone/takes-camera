@@ -16,6 +16,8 @@ import ProjectEditor from './ProjectEditor'
 import { SocialInbox, SocialReviewDetail } from './SocialReview'
 import AgencyInbox from './AgencyInbox'
 import Calendar from './Calendar'
+import Team from './Team'
+import { usePresence, useOnline } from '../lib/presence'
 
 interface TreeType { id: string; name: string }
 interface TreeSec { id: string; title: string; content_type_id: string }
@@ -33,6 +35,8 @@ export default function AgencyApp() {
   const [openKeys, setOpenKeys] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem('dr.nav') || '{}') } catch { return {} } })
   const [adding, setAdding] = useState<string | null>(null); const [newName, setNewName] = useState('')
   useEffect(() => setOpen(false), [loc.pathname])
+  usePresence(wsId, profile ? { id: profile.id, name: profile.full_name || profile.email || 'Teammate' } : null, loc.pathname)
+  const online = useOnline(); const othersOnline = Object.keys(online).filter(k => k !== profile?.id).length
   useEffect(() => {
     if (!wsId) return
     sb.from('assignments').select('id', { count: 'exact', head: true }).eq('workspace_id', wsId).eq('status', 'submitted').then(r => setReviewCount(r.count || 0))
@@ -108,10 +112,11 @@ export default function AgencyApp() {
 
         <p className="nav-h">Workspace</p>
         <NavLink to="/agency/creators">Creators</NavLink>
+        <NavLink to="/agency/team">Team{othersOnline > 0 && <span className="online-n" title={`${othersOnline} online now`}><i />{othersOnline}</span>}</NavLink>
         <NavLink to="/agency/settings">Settings</NavLink>
       </nav>
       <div style={{ marginTop: 'auto' }} className="stack">
-        <p className="who">{profile?.full_name || profile?.email}<br /><span>{ws.role[0].toUpperCase() + ws.role.slice(1)}</span></p>
+        <p className="who">{profile?.full_name || profile?.email}<br /><span>{ws.title || ws.role[0].toUpperCase() + ws.role.slice(1)}</span></p>
         <button className="btn sm ghost" onClick={signOut}>Sign out</button>
       </div>
     </aside>
@@ -133,6 +138,7 @@ export default function AgencyApp() {
         <Route path="social-review/:id" element={<SocialReviewDetail />} />
         <Route path="inbox" element={<AgencyInbox />} />
         <Route path="calendar" element={<Calendar />} />
+        <Route path="team" element={<Team />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/agency" replace />} />
       </Routes>

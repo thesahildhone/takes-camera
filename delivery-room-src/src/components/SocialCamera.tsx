@@ -27,6 +27,7 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
   const [phase, setPhase] = useState<'gate' | 'live' | 'edit'>('gate')
   const [gateErr, setGateErr] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>({ key: draftKey(assignmentId), assignmentId, clips: [], order: [], updatedAt: Date.now() })
+  const draftRef = useRef(draft); draftRef.current = draft
   const [loaded, setLoaded] = useState(false)
   const [rec, setRec] = useState<'idle' | 'count' | 'rec' | 'saving'>('idle')
   const [count, setCount] = useState(0); const [secs, setSecs] = useState(0)
@@ -46,7 +47,7 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
   const total = clips.reduce((n, c) => n + clipLen(c), 0)
   const refDur = audio?.duration || 0
 
-  useEffect(() => { loadDraft(assignmentId).then(d => { let has = false; if (d) { setDraft(d); const cs = ordered(d); const last = cs[cs.length - 1]; if (last?.refStart != null) setCueAt(Math.min(refDur, last.refStart + last.trimOut)); if (cs.length) { has = true; setPhase('edit'); setSel(cs[0].id) } } setLoaded(true); autoOpen.current = !has }) }, [assignmentId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadDraft(assignmentId).then(d => { let has = false; if (d) { setDraft(d); const cs = ordered(d); const last = cs[cs.length - 1]; if (last?.refStart != null) setCueAt(Math.min(refDur, last.refStart + last.trimOut)); if (cs.length) { has = true; setPhase('edit'); setSel(cs[0].id); setTimeout(remeasure, 50) } } setLoaded(true); autoOpen.current = !has }) }, [assignmentId]) // eslint-disable-line react-hooks/exhaustive-deps
   const autoOpen = useRef(false)
   useEffect(() => { if (loaded && autoOpen.current) { autoOpen.current = false; openCamera() } }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
   function toggleSmooth() { const on = !smoothOn; setSmoothOn(on); st.current.amt = on ? smooth / 100 : 0; try { localStorage.setItem('dr.smoothOn', on ? '1' : '0') } catch { /* */ } }
@@ -112,7 +113,7 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
     const real = await videoMeta(out.blob, 8000).then(m => m.duration).catch(() => NaN)
     const dur = isFinite(real) && real > 0.2 ? real : out.duration
     const clip: Clip = { id: uid().slice(0, 12), blob: out.blob, duration: dur, width: out.width, height: out.height, smoothing: out.smoothing,
-      trimIn: 0, trimOut: dur, refStart: pending.current.refStart, scriptAt: pending.current.scriptAt, thumb: await thumbAt(out.blob), createdAt: Date.now() }
+      measured: isFinite(real) && real > 0.2, trimIn: 0, trimOut: dur, refStart: pending.current.refStart, scriptAt: pending.current.scriptAt, thumb: await thumbAt(out.blob), createdAt: Date.now() }
     setRec('idle')
     if (retakeOf) { setPendingNew(clip); return }
     const d = { ...draft, clips: [...draft.clips, clip], order: [...draft.order, clip.id] }
@@ -127,7 +128,19 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
     }
     setRetakeOf(null); toEdit()
   }
-  function toEdit(id?: string | null) { eng.current?.stop(); eng.current = null; if (id !== undefined) setSel(id); setPhase('edit') }
+  function toEdit(id?: string | null) { eng.current?.stop(); eng.current = null; if (id !== undefined) setSel(id); setPhase('edit'); remeasure() }
+  // A busy phone can be too slow to report a clip's length the moment it stops. Once the camera is off,
+  // read the real length of any clip that only has a stopwatch guess, so the timeline matches the video.
+  async function remeasure() {
+    const guesses = draftRef.current.clips.filter(c => c.measured === false)
+    if (!guesses.length) return
+    const fixed: Record<string, number> = {}
+    for (const c of guesses) { const r = await videoMeta(c.blob, 20000).then(m => m.duration).catch(() => NaN); if (isFinite(r) && r > 0.2) fixed[c.id] = r }
+    if (!Object.keys(fixed).length) return
+    const cur = draftRef.current
+    const d = { ...cur, out: null, clips: cur.clips.map(c => fixed[c.id] == null ? c : { ...c, measured: true, duration: fixed[c.id], trimOut: Math.min(c.trimOut >= c.duration - 0.05 ? fixed[c.id] : c.trimOut, fixed[c.id]), trimIn: Math.min(c.trimIn, Math.max(0, fixed[c.id] - 0.3)) }) }
+    setDraft(d); await saveDraft(d)
+  }
   function shutter() { if (rec === 'rec') stop(); else if (rec === 'idle') begin() }
 
   async function setTrim(id: string, a: number, b: number) {

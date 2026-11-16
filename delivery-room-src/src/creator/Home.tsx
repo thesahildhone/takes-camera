@@ -45,13 +45,13 @@ export default function Home() {
     <button role="tab" aria-selected={side === 'of'} onClick={() => setSide('of')}>OF</button></div>
   if (side === 'socials') return <div className="phone soc">
     <CTop />
-    <h1 className="soc-name">{profile?.full_name || 'Your shots'}</h1>
+    <div className="chome-hi"><p>{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}</p><h1 className="soc-name">{first ? `Hey ${first}` : 'Your shots'}</h1></div>
     {toggle}
     <SocialHome />
   </div>
   return <div className="phone soc">
     <CTop />
-    <h1 className="soc-name">{profile?.full_name || 'Your sets'}</h1>
+    <div className="chome-hi"><p>{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}</p><h1 className="soc-name">{first ? `Hey ${first}` : 'Your sets'}</h1></div>
     {toggle}
     <div className="stack" style={{ marginBottom: 14 }}>
       <p className="eyebrow">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</p>

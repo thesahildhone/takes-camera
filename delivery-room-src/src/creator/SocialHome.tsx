@@ -71,7 +71,7 @@ export default function SocialHome() {
       <div><h2>{c.toFilm ? `${c.toFilm} shot${c.toFilm === 1 ? '' : 's'} to go` : c.total ? 'All sent' : 'Nothing here yet'}</h2><p>{c.sent} of {c.total} sent in total</p></div>
     </div>
     {soon.length > 0 && <div className="weekcard"><h2>This week</h2>
-      {soon.slice(0, 4).map(({ a, p }) => <Link key={a.id} to={'/creator/s/p/' + p.id} className="between"><b>{p.title}</b><span className={'duechip' + (new Date(a.due_at!) < new Date() ? ' late' : '')}>{dueLabel(a.due_at)}</span></Link>)}
+      {soon.slice(0, 4).map(({ a, p }) => <Link key={a.id} to={'/creator/s/p/' + p.id} className="between"><b>{p.title}</b><span className={'duechip' + (new Date(a.due_at!) < new Date() ? ' late' : new Date(a.due_at!).getTime() < Date.now() + 48 * 36e5 ? ' soon' : '')}>{dueLabel(a.due_at)}</span></Link>)}
       {soon.length > 4 && <span className="smuted" style={{ fontSize: 13 }}>and {soon.length - 4} more due this week</span>}</div>}
     {secs.length > 0 && <div className="secgrid">{secs.map(s => { const list = shotsIn(d, s.id), week = list.filter(x => d.sentWeek.has(x.a.id)).length
       return <button key={s.id} className="seccard" aria-pressed={s.id === secId} onClick={() => { setSecId(s.id); document.getElementById('shots')?.scrollIntoView({ behavior: 'smooth' }) }}>
@@ -79,9 +79,7 @@ export default function SocialHome() {
         <span className="plus" aria-hidden="true"><IcPlus /></span>
         <b>{s.title}</b><span>{list.filter(x => isSent(x.a.status)).length} of {list.length} sent · {week ? `${week} this week` : 'none this week'}</span></button> })}</div>}
     {secs.length > 0 && <>
-      <div className="sectabs" id="shots" role="tablist">{secs.map(s => { const list = shotsIn(d, s.id), sent = list.filter(x => isSent(x.a.status)).length
-        return <button key={s.id} role="tab" aria-selected={s.id === secId} onClick={() => setSecId(s.id)}><b>{s.title}</b><span>{sent}/{list.length}</span><span className="bar0"><i style={{ width: (sent / list.length * 100) + '%' }} /></span></button> })}</div>
-      <div className="between"><h2 className="sh2">To film</h2><span className="smuted">{cur.length} shot{cur.length === 1 ? '' : 's'}</span></div>
+<div className="between" id="shots" style={{ scrollMarginTop: 12 }}><h2 className="sh2">{d.sections.find(s => s.id === secId)?.title || 'To film'}</h2><span className="smuted">{cur.length} shot{cur.length === 1 ? '' : 's'}</span></div>
       {d.sections.find(s => s.id === secId)?.description && <p className="smuted">{d.sections.find(s => s.id === secId)!.description}</p>}
       <div className="shotlist">{cur.map(({ p, a }, i) => { const r = parseRef(p.reference_url)
         return <Link key={p.id} to={'/creator/s/p/' + p.id} className={'shotrow' + (isSent(a.status) ? ' sent' : '')}>
@@ -90,7 +88,7 @@ export default function SocialHome() {
             {a.status !== 'not_started' && <span className={'pill ' + SA_TONE[a.status]}>{SA_LABEL[a.status]}</span>}
             {usesScript(p.mode) && <span className="tag">Script</span>}{usesAudio(p.mode) && p.audio_status === 'ready' && <span className="tag">Sound</span>}
             {r && r.platform !== 'file' && r.platform !== 'other' && <span className="tag dim">{r.label}</span>}
-            {a.due_at && isToFilm(a.status) && <span className={'duechip' + (new Date(a.due_at) < new Date() ? ' late' : '')}>{dueLabel(a.due_at)}</span>}</span></span>
+            {a.due_at && isToFilm(a.status) && <span className={'duechip' + (new Date(a.due_at) < new Date() ? ' late' : new Date(a.due_at).getTime() < Date.now() + 48 * 36e5 ? ' soon' : '')}>{dueLabel(a.due_at)}</span>}</span></span>
           <span className="chev">›</span></Link> })}</div>
     </>}
   </div>

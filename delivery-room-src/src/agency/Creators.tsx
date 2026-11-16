@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { sb, errMsg } from '../lib/supabase'
 import { useWs } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, useToast, copyText, Modal } from '../lib/ui'
@@ -48,10 +49,10 @@ export default function Creators() {
   if (loading) return <Loading />
   if (error || !data) return <ErrorBox msg={error} />
   const active = data.creators.filter(c => c.status === 'active'), inactive = data.creators.filter(c => c.status !== 'active')
-  const pending = data.invites.filter(i => i.status === 'pending' && new Date(i.expires_at) > new Date())
+  const pending = data.invites.filter(i => i.kind === 'creator' && i.status === 'pending' && new Date(i.expires_at) > new Date())
   return <>
     <div className="page-title"><h1>Creators</h1>
-      {isAdmin && <div className="row wrap"><button className="btn ghost" onClick={() => { setCreating('staff'); setNewLink(null) }}>Invite team member</button><button className="btn primary" onClick={() => { setCreating('creator'); setNewLink(null) }}>Invite creator</button></div>}</div>
+      {isAdmin && <div className="row wrap"><Link className="btn ghost" to="/agency/team">Team members</Link><button className="btn primary" onClick={() => { setCreating('creator'); setNewLink(null) }}>Invite creator</button></div>}</div>
     {active.length === 0 ? <div className="empty"><h3>No creators yet</h3><p>Create an invite link and send it to a creator on WhatsApp, Telegram or email. They tap it, make an account and appear here.</p>{isAdmin && <button className="btn primary" onClick={() => setCreating('creator')}>Invite creator</button>}</div> :
       <div className="card scroll-x"><table className="table"><thead><tr><th>Creator</th><th>Joined</th><th>Open</th><th>Approved</th><th /></tr></thead><tbody>
         {active.map(c => <tr key={c.creator_id}><td><b>{c.profiles?.full_name || 'Creator'}</b><br /><span className="muted" style={{ fontSize: 13 }}>{c.profiles?.email}</span></td>
@@ -63,8 +64,6 @@ export default function Creators() {
         <div><b>{i.email || 'Invite link'}</b> <span className="pill todo">{i.kind === 'staff' ? 'Team · ' + i.role : 'Creator'}</span><br /><span className="muted mono">expires {fmtDate(i.expires_at, false)}</span></div>
         <div className="row"><button className="btn sm ghost" onClick={async () => toast(await copyText(inviteUrl(i.token)) ? 'Link copied' : inviteUrl(i.token))}>Copy link</button>
           {isAdmin && <button className="btn sm ghost" onClick={() => resend(i)}>New link</button>}{isAdmin && <button className="btn sm danger" onClick={() => revoke(i.id)}>Cancel</button>}</div></div>)}</div></section>}
-    <section className="stack"><h2 style={{ fontSize: 18 }}>Team</h2>
-      <div className="list">{data.staff.map(s => <div key={s.user_id} className="card tight between"><span><b>{s.profiles?.full_name || s.profiles?.email}</b> <span className="muted">{s.profiles?.email}</span></span><span className="pill todo">{s.role}</span></div>)}</div></section>
     {inactive.length > 0 && <section className="stack"><h2 style={{ fontSize: 18 }}>Removed or left</h2>
       <div className="list">{inactive.map(c => <div key={c.creator_id} className="card tight between"><span>{c.profiles?.full_name} <span className="muted">· {c.status}</span></span>{isAdmin && c.status === 'removed' && <button className="btn sm ghost" onClick={() => restore(c.creator_id)}>Restore</button>}</div>)}</div></section>}
 

@@ -76,5 +76,7 @@ export function dueLabel(s: string | null) {
   if (ms < 0) return 'Overdue · ' + fmtDate(s)
   const h = ms / 36e5
   if (h < 24) return `Due in ${Math.max(1, Math.round(h))}h`
-  return 'Due ' + fmtDate(s, false)
+  const d = new Date(s)
+  if (h < 24 * 6) return 'Due ' + d.toLocaleDateString(undefined, { weekday: 'short' })
+  return 'Due ' + d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) })
 }

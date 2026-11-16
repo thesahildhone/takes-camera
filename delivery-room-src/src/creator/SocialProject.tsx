@@ -116,7 +116,8 @@ export default function SocialProject() {
     : a.due_at ? <div className={'soc-note' + (new Date(a.due_at) < new Date() ? ' late' : '')}>{dueLabel(a.due_at)}</div> : null
 
   return <div className="phone soc">
-    <ShotView p={p} sectionName={sec?.title || 'Back'} index={pos.i} total={pos.n} status={a.status}
+    {/* The shot page (and its reference player) is taken down while the camera is open, so nothing plays behind it. */}
+    {!cam && <ShotView p={p} sectionName={sec?.title || 'Back'} index={pos.i} total={pos.n} status={a.status}
       refUrl={p.ref_video_path ? urls[p.ref_video_path] || null : null} audioUrl={p.ref_audio_path ? urls[p.ref_audio_path] : null}
       onBack={() => nav('/creator')} notice={status}
       below={subs.length > 0 && <details className="versions"><summary>Your versions ({subs.length})</summary>
@@ -125,7 +126,7 @@ export default function SocialProject() {
         {draftClips.length > 0 || draft?.out ? <button className="sbtn primary" onClick={() => draft?.out && !draftClips.length ? setReview(draft) : setCam(true)}>{draft?.out && !draftClips.length ? 'Send your video' : `Continue · ${draftClips.length} clip${draftClips.length === 1 ? '' : 's'} saved`}</button>
           : <button className="sbtn primary" disabled={opening} onClick={openCam}>{opening ? 'Loading sound…' : 'Film it'}</button>}
         <button className="sbtn ghost" onClick={() => { if (fileIn.current) { fileIn.current.value = ''; fileIn.current.click() } }}>Choose from camera roll</button></>
-        : <Link className="sbtn ghost" to="/creator">Back to shots</Link>} />
+        : <Link className="sbtn ghost" to="/creator">Back to shots</Link>} />}
     <input ref={fileIn} type="file" accept="video/*" hidden onChange={e => onPicked(e.target.files?.[0])} />
 
     {cam && <SocialCamera project={p} assignmentId={a.id} audio={dance ? audio : null} initialSmooth={profile?.smoothing ?? 45}

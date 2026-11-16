@@ -6,6 +6,7 @@ export interface Clip {
   refStart: number | null                   // where in the reference audio this clip starts (dance mode)
   scriptAt: number | null                   // teleprompter restart position (talking mode)
   thumb: string | null; createdAt: number
+  measured?: boolean                        // false when the length is only a stopwatch guess
 }
 export interface Output {
   subId: string; clean: Blob; mix: Blob | null; mixNote: string | null; duration: number; width: number; height: number

@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { sb } from './supabase'
 
 export interface Profile { id: string; full_name: string; email: string | null; kind: 'business' | 'creator'; smoothing: number }
-export interface StaffWs { id: string; name: string; role: 'owner' | 'admin' | 'reviewer'; status: string }
+export interface StaffWs { id: string; name: string; role: 'owner' | 'admin' | 'reviewer'; status: string; title?: string | null }
 export interface CreatorWs { id: string; name: string; status: string }
 interface Ctx {
   session: Session | null; profile: Profile | null; ready: boolean
@@ -27,13 +27,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const uid = s.user.id
     const [p, wm, cm] = await Promise.all([
       sb.from('profiles').select('*').eq('id', uid).maybeSingle(),
-      sb.from('workspace_members').select('role, workspaces(id,name,status)').eq('user_id', uid),
+      sb.from('workspace_members').select('role, title, workspaces(id,name,status)').eq('user_id', uid),
       sb.from('creator_memberships').select('status, workspaces(id,name)').eq('creator_id', uid).eq('status', 'active'),
     ])
     setProfile((p.data as Profile) || null)
-    type WmRow = { role: StaffWs['role']; workspaces: { id: string; name: string; status: string } | null }
+    type WmRow = { role: StaffWs['role']; title: string | null; workspaces: { id: string; name: string; status: string } | null }
     type CmRow = { status: string; workspaces: { id: string; name: string } | null }
-    const st = ((wm.data || []) as unknown as WmRow[]).filter(r => r.workspaces).map(r => ({ id: r.workspaces!.id, name: r.workspaces!.name, status: r.workspaces!.status, role: r.role }))
+    const st = ((wm.data || []) as unknown as WmRow[]).filter(r => r.workspaces).map(r => ({ id: r.workspaces!.id, name: r.workspaces!.name, status: r.workspaces!.status, role: r.role, title: r.title }))
     setStaff(st)
     setCreatorOf(((cm.data || []) as unknown as CmRow[]).filter(r => r.workspaces).map(r => ({ id: r.workspaces!.id, name: r.workspaces!.name, status: r.status })))
     setWsIdState(cur => (cur && st.some(w => w.id === cur)) ? cur : (st[0]?.id ?? null))

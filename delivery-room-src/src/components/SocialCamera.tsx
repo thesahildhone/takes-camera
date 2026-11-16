@@ -18,8 +18,10 @@ export function sentences(s: string) { return s.split(/(?<=[.!?…])\s+|\n+/).ma
 
 export default function SocialCamera({ project, assignmentId, audio, initialSmooth, onSmooth, onClose, onSend }: Props) {
   const talking = usesScript(project.mode), dance = usesAudio(project.mode) && !!audio
-  const cvRef = useRef<HTMLCanvasElement>(null)
-  const st = useRef<EngineState>({ amt: initialSmooth / 100, cmp: false, facing: 'user' })
+  const cvRef = useRef<HTMLCanvasElement>(null); const vRef = useRef<HTMLVideoElement>(null)
+  // Smoothing is off unless the creator turns it on: the plain camera is lighter and smoother on every phone.
+  const [smoothOn, setSmoothOn] = useState(() => { try { return localStorage.getItem('dr.smoothOn') === '1' } catch { return false } })
+  const st = useRef<EngineState>({ amt: smoothOn ? (initialSmooth || 45) / 100 : 0, cmp: false, facing: 'user' })
   const eng = useRef<Engine | null>(null)
   const actx = useRef<AudioContext | null>(null); const asrc = useRef<AudioBufferSourceNode | null>(null)
   const [phase, setPhase] = useState<'gate' | 'live' | 'edit'>('gate')
@@ -29,7 +31,7 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
   const [rec, setRec] = useState<'idle' | 'count' | 'rec' | 'saving'>('idle')
   const [count, setCount] = useState(0); const [secs, setSecs] = useState(0)
   const [msg, setMsg] = useState<string | null>(null)
-  const [smooth, setSmooth] = useState(initialSmooth)
+  const [smooth, setSmooth] = useState(initialSmooth || 45)
   const [timer, setTimer] = useState(0)
   const [tp, setTp] = useState<TP>('still'); const [tpSize, setTpSize] = useState(34); const [tpSpeed, setTpSpeed] = useState(28); const [tpAt, setTpAt] = useState(0)
   const [cueAt, setCueAt] = useState(0)
@@ -44,7 +46,14 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
   const total = clips.reduce((n, c) => n + clipLen(c), 0)
   const refDur = audio?.duration || 0
 
-  useEffect(() => { loadDraft(assignmentId).then(d => { if (d) { setDraft(d); const cs = ordered(d); const last = cs[cs.length - 1]; if (last?.refStart != null) setCueAt(Math.min(refDur, last.refStart + last.trimOut)); if (cs.length) { setPhase('edit'); setSel(cs[0].id) } } setLoaded(true) }) }, [assignmentId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadDraft(assignmentId).then(d => { let has = false; if (d) { setDraft(d); const cs = ordered(d); const last = cs[cs.length - 1]; if (last?.refStart != null) setCueAt(Math.min(refDur, last.refStart + last.trimOut)); if (cs.length) { has = true; setPhase('edit'); setSel(cs[0].id) } } setLoaded(true); autoOpen.current = !has }) }, [assignmentId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const autoOpen = useRef(false)
+  useEffect(() => { if (loaded && autoOpen.current) { autoOpen.current = false; openCamera() } }, [loaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  function toggleSmooth() { const on = !smoothOn; setSmoothOn(on); st.current.amt = on ? smooth / 100 : 0; try { localStorage.setItem('dr.smoothOn', on ? '1' : '0') } catch { /* */ } }
+  function audioCtx() { // created and resumed inside a tap, so iPhone lets the sound play
+    if (!actx.current) { const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext; actx.current = new AC() }
+    actx.current.resume().catch(() => {}); return actx.current
+  }
   useEffect(() => () => { eng.current?.stop(); try { asrc.current?.stop() } catch { /* */ } actx.current?.close().catch(() => {}) }, [])
   useEffect(() => { const t = setTimeout(() => onSmooth(smooth), 600); return () => clearTimeout(t) }, [smooth, onSmooth])
   useEffect(() => { if (rec !== 'rec') return; const t0 = Date.now(); const i = setInterval(() => setSecs(Math.floor((Date.now() - t0) / 1000)), 250); return () => clearInterval(i) }, [rec])
@@ -52,15 +61,16 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
 
   async function persist(d0: Draft) { const d = { ...d0, out: null }; setDraft(d); const ok = await saveDraft(d); if (!ok) setMsg("This browser couldn't save your clips on the phone (private browsing or storage full). Don't leave this screen until you've sent them.") }
 
+  const opening = useRef(false)
   async function openCamera() {
-    setGateErr(null)
+    if (opening.current || eng.current) return
+    opening.current = true; setGateErr(null)
     try {
-      if (dance && !actx.current) { const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext; actx.current = new AC(); await actx.current.resume() }
-      eng.current = await startEngine(cvRef.current!, st.current, setMsg)
+      eng.current = await startEngine(cvRef.current!, st.current, setMsg, vRef.current)
       persistRequested()
       setPhase('live')
       setTimeout(() => { const s = eng.current?.size(); if (s) setQuality(Math.min(s.w, s.h) >= 1000 ? '1080p' : Math.min(s.w, s.h) >= 700 ? '720p' : Math.min(s.w, s.h) + 'p') }, 800)
-    } catch (e) { setGateErr((e as Error).message) }
+    } catch (e) { setGateErr((e as Error).message) } finally { opening.current = false }
   }
   function toLive(retake: string | null) {
     setRetakeOf(retake)
@@ -71,6 +81,7 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
 
   async function begin() {
     if (rec !== 'idle' || !eng.current) return
+    if (dance) audioCtx()
     if (dance && cueAt >= refDur - 0.5) { setMsg('You have reached the end of the sound. Drag the slider to choose where the next clip starts, or tap Done.'); return }
     const n = dance ? Math.max(3, timer) : timer
     if (n) { setRec('count'); for (let i = n; i > 0; i--) { setCount(i); await new Promise(r => setTimeout(r, 1000)) } }
@@ -98,7 +109,7 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
     const out = await eng.current.stopRec()
     if (!out) { setRec('idle'); return }
     // use the recorded file's real length; wall-clock time can run ahead of the encoder on a busy phone
-    const real = await videoMeta(out.blob, 3000).then(m => m.duration).catch(() => NaN)
+    const real = await videoMeta(out.blob, 8000).then(m => m.duration).catch(() => NaN)
     const dur = isFinite(real) && real > 0.2 ? real : out.duration
     const clip: Clip = { id: uid().slice(0, 12), blob: out.blob, duration: dur, width: out.width, height: out.height, smoothing: out.smoothing,
       trimIn: 0, trimOut: dur, refStart: pending.current.refStart, scriptAt: pending.current.scriptAt, thumb: await thumbAt(out.blob), createdAt: Date.now() }
@@ -170,13 +181,13 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
   const mm = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
   return <div className="cam scam" role="dialog" aria-label="Camera">
-    <canvas ref={cvRef} className="view" style={{ visibility: phase === 'edit' ? 'hidden' : 'visible' }} />
-    {phase === 'gate' && <div className="gate" style={{ background: '#05081a' }}><div>
+    <video ref={vRef} className="view" muted playsInline style={{ visibility: 'hidden' }} />
+    <canvas ref={cvRef} className="view" style={{ visibility: 'hidden' }} />
+    {phase === 'gate' && <div className="gate" style={{ background: '#17131A' }}><div>
       <h2 style={{ fontSize: 22 }}>{project.title}</h2>
-      <p style={{ color: '#aab3d6' }}>Record in as many clips as you like. Stop whenever, then carry on. You can redo any single clip later. Clips stay on this phone until you send them.</p>
-      {dance && <p style={{ color: '#aab3d6' }}>The sound plays while you record. Headphones keep it out of your mic.</p>}
-      <button className="cbtn primary" style={{ padding: '0 28px' }} onClick={openCamera}>Turn on camera</button>
-      {gateErr && <p style={{ color: '#ff8fb8' }} role="alert">{gateErr}</p>}
+      {!gateErr ? <p style={{ color: '#cfc7d0' }} role="status">Opening camera…</p>
+        : <><p style={{ color: '#ffb3b3' }} role="alert">{gateErr}</p>
+          <button className="cbtn primary" style={{ padding: '0 28px' }} onClick={openCamera}>Try again</button></>}
       <button className="cbtn ghost" style={{ padding: '0 22px', height: 44 }} onClick={close}>{gateErr ? 'Back (use camera roll instead)' : 'Cancel'}</button>
     </div></div>}
 
@@ -189,22 +200,23 @@ export default function SocialCamera({ project, assignmentId, audio, initialSmoo
         {!talking && <span className="cpill">{retakeOf ? `Redoing clip ${draft.order.indexOf(retakeOf) + 1}` : `Clip ${clips.length + 1}`}</span>}
         <button className="cround" aria-label="Switch camera" disabled={rec !== 'idle'} onClick={() => eng.current?.flip()}><IcFlip /></button>
       </div>
-      {showTP && <div className="tp" style={{ fontSize: tpSize }}>
-        <div className="tp-in" ref={tpBox}>{sents.slice(tpAt).map((s, i) => <p key={i} className={i === 0 ? 'cur' : ''} onClick={() => rec === 'idle' && setTpAt(tpAt + i)}>{s}</p>)}</div>
-      </div>}
-      {showTP && rec === 'idle' && <div className="tp-tools">
+      {showTP && <div className="tpwrap"><div className={'tp ' + tp} style={{ fontSize: tpSize }} onClick={() => { if (tp === 'still' && rec === 'rec' && tpAt < sents.length - 1) setTpAt(tpAt + 1) }}>
+        <div className="tp-in" ref={tpBox}>{sents.slice(tpAt).map((s, i) => <p key={i} className={i === 0 ? 'cur' : ''} onClick={e => { if (rec === 'idle') { e.stopPropagation(); setTpAt(tpAt + i) } }}>{s}</p>)}</div>
+      </div>
+      {rec === 'idle' && <div className="tp-tools">
         <button className="cpill" onClick={() => setTpSize(s => Math.max(20, s - 4))} aria-label="Smaller script">A−</button>
         <button className="cpill" onClick={() => setTpSize(s => Math.min(56, s + 4))} aria-label="Bigger script">A+</button>
         {tp === 'scroll' && <><button className="cpill" onClick={() => setTpSpeed(s => Math.max(8, s - 8))} aria-label="Slower">Slower</button><button className="cpill" onClick={() => setTpSpeed(s => Math.min(90, s + 8))} aria-label="Faster">Faster</button></>}
         {tpAt > 0 && <button className="cpill" onClick={() => setTpAt(0)}>From the top</button>}
-        <span className="cpill muted-pill">Tap a line to start there</span>
-      </div>}
+        <span className="cpill muted-pill">{tp === 'still' ? 'While filming, tap the script for the next line' : 'Tap a line to start there'}</span>
+      </div>}</div>}
       {rec === 'count' && <div className="countdown" aria-live="assertive">{count}</div>}
       {msg && <div className="msg" role="alert">{msg}<br /><button style={{ fontWeight: 700, textDecoration: 'underline', marginTop: 6 }} onClick={() => setMsg(null)}>OK</button></div>}
       <div className="bottom">
         {dance && rec === 'idle' && <div className="cue"><span>Sound starts at <b className="mono">{mm(cueAt)}</b> of {mm(refDur)}</span>
           <input type="range" min={0} max={Math.max(0, refDur - 1)} step={0.1} value={cueAt} onChange={e => setCueAt(Number(e.target.value))} aria-label="Where the sound starts" /></div>}
-        {rec === 'idle' && <div className="smooth"><span style={{ fontSize: 13, fontWeight: 700 }}>Smooth</span>
+        {rec === 'idle' && !smoothOn && <div className="pills"><button className="cpill" aria-pressed={false} onClick={toggleSmooth}>Smooth skin: off</button></div>}
+        {rec === 'idle' && smoothOn && <div className="smooth"><button className="cpill" aria-pressed={true} onClick={toggleSmooth} style={{ fontSize: 12.5 }}>Smooth on</button>
           <input type="range" min={0} max={100} value={smooth} onChange={e => { const v = Number(e.target.value); st.current.amt = v / 100; setSmooth(v) }} aria-label="Skin smoothing" />
           <span className="val">{smooth}</span>
           <button className="cmp" onPointerDown={e => { e.preventDefault(); st.current.cmp = true }} onPointerUp={() => { st.current.cmp = false }} onPointerLeave={() => { st.current.cmp = false }} onContextMenu={e => e.preventDefault()}>Hold: original</button></div>}

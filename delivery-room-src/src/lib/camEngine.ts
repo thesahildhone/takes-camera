@@ -14,7 +14,9 @@ export interface Engine {
   stop: () => void
 }
 
-export async function startEngine(cv: HTMLCanvasElement, st: EngineState, onMsg: (m: string) => void): Promise<Engine> {
+// Smoothing at 0 runs the light path: the camera plays straight into a <video> and is recorded as is, with no
+// per-frame GPU work. That is what keeps the preview, teleprompter and recording smooth on older phones.
+export async function startEngine(cv: HTMLCanvasElement, st: EngineState, onMsg: (m: string) => void, view?: HTMLVideoElement | null): Promise<Engine> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser cannot open the camera. On iPhone, use Safari.')
   const gl = cv.getContext('webgl', { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false })
   if (!gl) throw new Error('This phone cannot run the smoothing filter. Use Choose from camera roll instead.')
@@ -31,8 +33,17 @@ export async function startEngine(cv: HTMLCanvasElement, st: EngineState, onMsg:
   const U = { amt: gl.getUniformLocation(prog, 'u_amt'), px: gl.getUniformLocation(prog, 'u_px'), rad: gl.getUniformLocation(prog, 'u_rad'), mir: gl.getUniformLocation(prog, 'u_mir') }
 
   let stream: MediaStream | null = null
-  const vid = document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.setAttribute('playsinline', ''); vid.setAttribute('muted', '')
-  vid.style.cssText = 'position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left:0;top:0'; document.body.appendChild(vid)
+  const own = !view
+  const vid = view || document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.setAttribute('playsinline', ''); vid.setAttribute('muted', '')
+  if (own) { vid.style.cssText = 'position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left:0;top:0'; document.body.appendChild(vid) }
+  const light = () => !!view && st.amt <= 0
+  let recLight = false
+  function showMode() {
+    if (!view) return
+    const l = recorder ? recLight : light()
+    view.style.visibility = l ? 'visible' : 'hidden'; cv.style.visibility = l ? 'hidden' : 'visible'
+    view.style.transform = st.facing === 'user' ? 'scaleX(-1)' : 'none'
+  }
   const onPause = () => { if (!document.hidden) vid.play().catch(() => {}) }; vid.addEventListener('pause', onPause)
   async function openCam() {
     stream?.getTracks().forEach(t => t.stop())
@@ -42,7 +53,7 @@ export async function startEngine(cv: HTMLCanvasElement, st: EngineState, onMsg:
     vid.srcObject = new MediaStream(stream.getVideoTracks()); await vid.play().catch(() => {})
   }
   try { await openCam() } catch (e) {
-    vid.remove()
+    if (own) vid.remove()
     const n = (e as Error).name
     throw new Error(n === 'NotAllowedError' ? 'Camera access was blocked. In Safari, tap aA in the address bar, then Website Settings, and allow Camera and Microphone. Or use Choose from camera roll.'
       : n === 'NotFoundError' ? 'No camera was found on this device.' : n === 'NotReadableError' ? 'The camera is being used by another app. Close it and try again.' : 'Could not start the camera.')
@@ -54,7 +65,8 @@ export async function startEngine(cv: HTMLCanvasElement, st: EngineState, onMsg:
     if (!alive) return
     const t0 = performance.now(); lastFrame = t0
     if (vid.paused && !document.hidden) vid.play().catch(() => {})
-    if (vid.readyState >= 2 && vid.videoWidth) {
+    showMode()
+    if (vid.readyState >= 2 && vid.videoWidth && !(recorder ? recLight : light())) {
       const w = vid.videoWidth, h = vid.videoHeight
       if (!recorder && (cv.width !== w || cv.height !== h)) { cv.width = w; cv.height = h }
       gl!.bindTexture(gl!.TEXTURE_2D, tex); gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGB, gl!.RGB, gl!.UNSIGNED_BYTE, vid)
@@ -71,25 +83,27 @@ export async function startEngine(cv: HTMLCanvasElement, st: EngineState, onMsg:
 
   const mime = recorderMime()
   function startRec() {
-    if (!window.MediaRecorder || !(cv as HTMLCanvasElement & { captureStream?: unknown }).captureStream) { onMsg('This phone cannot record from the filtered camera. Use Choose from camera roll instead.'); return null }
+    recLight = light()
+    if (!window.MediaRecorder) { onMsg('This phone cannot record video here. Use Choose from camera roll instead.'); return null }
+    if (!recLight && !(cv as HTMLCanvasElement & { captureStream?: unknown }).captureStream) { onMsg('This phone cannot record with smoothing on. Turn Smooth skin off, or use Choose from camera roll.'); return null }
     st.cmp = false
-    const out = (cv as HTMLCanvasElement & { captureStream(f?: number): MediaStream }).captureStream(30)
+    const out = recLight ? new MediaStream(stream!.getVideoTracks()) : (cv as HTMLCanvasElement & { captureStream(f?: number): MediaStream }).captureStream(30)
     const all = stream!.getAudioTracks(), aud = all.filter(t => t.readyState === 'live' && !t.muted)
     aud.forEach(t => { t.enabled = true; out.addTrack(t) })
     if (all.length && !aud.length) onMsg('Microphone is busy (a call?). Recording without sound.')
     try { recorder = new MediaRecorder(out, mime ? { mimeType: mime, videoBitsPerSecond: 8_000_000 } : {}) } catch { onMsg('Recording could not start on this phone.'); return null }
     chunks = []; recorder.ondataavailable = e => { if (e.data?.size) chunks.push(e.data) }
     sm = Math.round(st.amt * 100)
-    recorder.start(1000); recStart = performance.now()
+    recorder.start(1000); recStart = performance.now(); showMode()
     return { startedAt: recStart }
   }
   function stopRec(): Promise<RecOut | null> {
     const r = recorder; if (!r) return Promise.resolve(null)
-    const stopAt = performance.now(), w = cv.width, h = cv.height
+    const stopAt = performance.now(), w = recLight ? vid.videoWidth : cv.width, h = recLight ? vid.videoHeight : cv.height
     return new Promise(res => {
       let done = false
       const fin = () => {
-        if (done) return; done = true; recorder = null
+        if (done) return; done = true; recorder = null; showMode()
         const blob = new Blob(chunks, { type: ((r.mimeType || mime || 'video/mp4').split(';')[0]) || 'video/mp4' })
         if (!blob.size) { onMsg('Nothing was recorded. If you are on a call, iPhone blocks recording until it ends.'); return res(null) }
         res({ blob, duration: (stopAt - recStart) / 1000, width: w, height: h, smoothing: sm, startedAt: recStart })
@@ -105,11 +119,11 @@ export async function startEngine(cv: HTMLCanvasElement, st: EngineState, onMsg:
     try { await openCam() } catch { st.facing = st.facing === 'user' ? 'environment' : 'user'; try { await openCam() } catch { /* */ } onMsg('Could not switch camera') }
   }
   return {
-    startRec, stopRec, flip, recording: () => !!recorder, size: () => ({ w: cv.width, h: cv.height }),
+    startRec, stopRec, flip, recording: () => !!recorder, size: () => light() ? { w: vid.videoWidth, h: vid.videoHeight } : { w: cv.width, h: cv.height },
     stop: () => {
       alive = false; clearInterval(watchdog); cancelAnimationFrame(raf)
       try { if (recorder && recorder.state !== 'inactive') recorder.stop() } catch { /* */ }
-      stream?.getTracks().forEach(t => t.stop()); vid.removeEventListener('pause', onPause); vid.remove()
+      stream?.getTracks().forEach(t => t.stop()); vid.removeEventListener('pause', onPause); if (own) vid.remove(); else vid.srcObject = null
     },
   }
 }

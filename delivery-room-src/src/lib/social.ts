@@ -39,7 +39,7 @@ export const usesAudio = (m: Mode) => m === 'dance' || m === 'both'
 /** Mirrors social_project_ready() in the database. */
 export function readyProblem(p: Project): string | null {
   if (usesScript(p.mode) && (!p.transcript_approved || !p.script.trim())) return 'Approve the script first'
-  if (usesAudio(p.mode) && p.audio_status !== 'ready' && p.rights_status !== 'not_permitted') return 'Reference audio is not ready'
+  if (usesAudio(p.mode) && p.audio_status !== 'ready' && p.rights_status !== 'not_permitted' && !(p.reference_url || '').trim()) return 'Reference audio is not ready'
   if (p.mode !== 'talking' && !p.ref_video_path && !(p.reference_url || '').trim()) return 'Add a reference video or link'
   return null
 }

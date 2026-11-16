@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { instructionLines, pad2, parseRef, SA_LABEL, usesAudio, usesScript, type Project, type SAStatus } from '../lib/social'
 import { IcBack } from '../lib/icons'
 
@@ -10,11 +10,15 @@ interface Props {
 
 export function RefCard({ p, refUrl }: { p: Project; refUrl: string | null }) {
   const ref = parseRef(p.reference_url)
+  // The platform's own player comes first: it plays the original sound instantly, no download needed.
+  const [saved, setSaved] = useState(false)
+  if (ref?.embed && !(saved && refUrl)) return <div className={'refcard embed ' + ref.platform}><span className="refsrc">{ref.label}</span>
+    <iframe src={ref.embed} title={`${ref.label} reference`} allow="autoplay; encrypted-media; picture-in-picture; clipboard-write" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" />
+    <div className="refbar"><a className="reflink" href={p.reference_url!} target="_blank" rel="noreferrer">Open on {ref.label}</a>
+      {refUrl && <button className="reflink" onClick={() => setSaved(true)}>Play saved copy</button>}</div></div>
   if (refUrl) return <div className="refcard"><span className="refsrc">{ref?.label && ref.platform !== 'file' ? ref.label : 'Reference'}</span>
-    <video src={refUrl} controls playsInline preload="metadata" /></div>
-  if (ref?.embed) return <div className="refcard embed"><span className="refsrc">{ref.label}</span>
-    <iframe src={ref.embed} title={`${ref.label} reference`} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" />
-    <a className="reflink" href={p.reference_url!} target="_blank" rel="noreferrer">Open on {ref.label} if it doesn't load</a></div>
+    <video src={refUrl} controls playsInline preload="metadata" />
+    {ref?.embed && <div className="refbar"><button className="reflink" onClick={() => setSaved(false)}>Play on {ref.label}</button></div>}</div>
   if (p.reference_url) return <div className="refcard empty"><span className="refsrc">{ref?.label || 'Link'}</span>
     <a className="btn ghost" href={p.reference_url} target="_blank" rel="noreferrer">Open reference</a></div>
   return null
@@ -35,7 +39,7 @@ export default function ShotView({ p, sectionName, index, total, status, refUrl,
     {usesScript(p.mode) && p.script.trim() && <div className="scriptcard"><p className="lbl">Your script</p><p className="txt">{p.script}</p></div>}
     {usesAudio(p.mode) && <div className="audionote">
       {p.audio_status === 'ready' && audioUrl ? <><p><b>Sound plays while you film.</b> Wear headphones if you can, so the music isn't picked up by your mic.</p><audio src={audioUrl} controls preload="none" /></>
-        : <p><b>No backing sound for this one.</b> Film along with the reference video above.</p>}
+        : p.reference_url ? <p><b>Play the reference above to hear the sound.</b> In the camera, film along to it with headphones or from memory.</p> : <p><b>No backing sound for this one.</b> Film along with the reference video above.</p>}
       {p.rights_status !== 'licensed' && <p className="muted" style={{ fontSize: 13 }}>Your agency gets a clean video without the music. {p.rights_status === 'not_permitted' ? 'The music is not cleared for reuse.' : 'The music rights are not confirmed yet.'}</p>}
     </div>}
     {(lines.length > 0 || p.description) && <div className="before"><h2>Before you film</h2>

@@ -83,7 +83,7 @@ export async function assemble(o: AssembleOpts, primed: { ctx: AudioContext; v: 
     cleanup.push(() => { drawing = false })
     requestAnimationFrame(draw)
 
-    let doneSecs = 0, started = false
+    let doneSecs = 0, started = false, played = 0
     for (let i = 0; i < clips.length; i++) {
       const c = clips[i], url = URL.createObjectURL(c.blob); cleanup.push(() => URL.revokeObjectURL(url))
       o.onPct(Math.round(doneSecs / total * 100), `Joining clip ${i + 1} of ${clips.length}`)
@@ -107,6 +107,7 @@ export async function assemble(o: AssembleOpts, primed: { ctx: AudioContext; v: 
         }, 15)
       })
       v.pause(); try { music?.stop() } catch { /* already stopped */ }
+      played += Math.max(0, Math.min(v.currentTime, c.trimOut) - c.trimIn)
       if (canPause && i < clips.length - 1) recs.forEach(x => x.r.state === 'recording' && x.r.pause())
       doneSecs += clipLen(c)
     }
@@ -114,6 +115,6 @@ export async function assemble(o: AssembleOpts, primed: { ctx: AudioContext; v: 
     const [clean, mix] = await Promise.all(recs.map(x => x.done))
     o.onPct(100, 'Ready')
     if (!clean.size) throw new Error('Joining produced an empty video')
-    return { clean, mix: mix && mix.size ? mix : null, duration: total, width: W, height: H, mixNote: o.music && !(mix && mix.size) ? 'Music version could not be made on this phone' : null }
+    return { clean, mix: mix && mix.size ? mix : null, duration: played > 0.3 ? played : total, width: W, height: H, mixNote: o.music && !(mix && mix.size) ? 'Music version could not be made on this phone' : null }
   } finally { cleanup.forEach(f => { try { f() } catch { /* ignore */ } }) }
 }

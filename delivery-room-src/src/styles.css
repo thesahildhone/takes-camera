@@ -190,7 +190,7 @@ p{margin:0}
 
 /* camera */
 .cam{position:fixed;inset:0;z-index:80;background:#09080a;color:#f4eff2}
-.cam canvas.view{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam canvas.view,.cam video.view{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .cam .top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 12px) max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px));background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent)}
 .cam .cpill{display:inline-flex;align-items:center;gap:8px;background:rgba(14,12,16,.72);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:8px 13px;font-size:13px;font-weight:600;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#f4eff2}
 .cam .cround{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:rgba(14,12,16,.72);border:1px solid rgba(255,255,255,.14);color:#f4eff2}
@@ -300,7 +300,11 @@ p{margin:0}
 .refcard.embed iframe{width:100%;height:min(640px,78vh);border:0;background:#fff}
 .refcard.empty{padding:40px 16px;place-items:center;background:var(--raise)}
 .refsrc{position:absolute;left:12px;top:12px;z-index:1;font-size:12px;font-weight:600;background:rgba(42,35,48,.72);border-radius:6px;padding:4px 9px;color:#fff}
-.reflink{font-size:13px;padding:10px 14px;color:#cfc7d0}
+.reflink{font-size:13px;padding:10px 14px;color:#cfc7d0;background:none;border:0;font:inherit;font-size:13px;cursor:pointer;text-decoration:none}
+.refbar{display:flex;justify-content:space-between;align-items:center;background:var(--ink)}
+.refcard.embed .refsrc{display:none}
+.refcard.embed.instagram iframe{height:min(720px,84vh)}
+.refcard.embed.tiktok iframe{height:min(760px,84vh)}
 .scriptcard{background:var(--raise);border-radius:16px;padding:18px 20px}
 .scriptcard .lbl{font-size:13px;color:var(--muted);font-weight:600;margin-bottom:6px}.scriptcard .txt{font-size:20px;line-height:1.4;white-space:pre-wrap;letter-spacing:-.01em}
 .audionote{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:8px}
@@ -316,11 +320,13 @@ p{margin:0}
 /* social camera */
 .scam .cmodes button{padding:7px 11px}
 .scam .top{z-index:4}
-.scam .tp{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 68px);max-height:38vh;overflow:hidden;padding:0 18px;z-index:2;pointer-events:auto;-webkit-mask-image:linear-gradient(to bottom,#000 80%,transparent);mask-image:linear-gradient(to bottom,#000 80%,transparent)}
-.scam .tp p{font-weight:700;line-height:1.25;margin:0 0 .35em;color:rgba(255,255,255,.62);text-shadow:0 2px 10px rgba(0,0,0,.65);cursor:pointer}
-.scam .tp p.cur{color:#fff}
+.scam .tpwrap{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 62px);z-index:2;display:grid;gap:6px}
+.scam .tp{position:relative;max-height:36vh;overflow:hidden;padding:4px 20px 18px;z-index:2;pointer-events:auto;background:linear-gradient(to bottom,rgba(10,8,12,.62) 70%,rgba(10,8,12,0));-webkit-mask-image:linear-gradient(to bottom,#000 82%,transparent);mask-image:linear-gradient(to bottom,#000 82%,transparent)}
+.scam .tp p{font-weight:700;line-height:1.2;margin:0 0 .4em;color:rgba(255,255,255,.5);text-shadow:0 2px 10px rgba(0,0,0,.7);cursor:pointer;font-size:.72em;letter-spacing:-.01em}
+.scam .tp p.cur{color:#fff;font-size:1em}
+.scam .tp.scroll p{font-size:1em;color:#fff}
 .scam .tp-in{will-change:transform}
-.scam .tp-tools{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 68px + 38vh + 6px);display:flex;flex-wrap:wrap;gap:6px;justify-content:center;z-index:3}
+.scam .tp-tools{position:relative;padding:0 12px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;z-index:3}
 .scam .muted-pill{color:#bdb5c0;font-weight:500}
 .scam .countdown{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-display);font-size:140px;font-weight:800;color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.6);z-index:5;pointer-events:none}
 .scam .cue{display:grid;gap:4px;background:rgba(14,12,16,.72);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:10px 14px;font-size:13.5px}

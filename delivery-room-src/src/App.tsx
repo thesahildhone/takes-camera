@@ -1,7 +1,7 @@
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { ToastProvider, Loading } from './lib/ui'
-import { AuthPage, InvitePage, SetupPage, Welcome } from './Public'
+import { AuthPage, InvitePage, ResetPage, SetupPage, Welcome } from './Public'
 import AgencyApp from './agency/AgencyApp'
 import CreatorApp from './creator/CreatorApp'
 
@@ -27,6 +27,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
+        <Route path="/reset" element={<ResetPage />} />
         <Route path="/setup" element={<Guard><SetupPage /></Guard>} />
         <Route path="/agency/*" element={<Guard><AgencyApp /></Guard>} />
         <Route path="/creator/*" element={<Guard><CreatorApp /></Guard>} />

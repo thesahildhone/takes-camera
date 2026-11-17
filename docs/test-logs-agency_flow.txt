@@ -1,0 +1,12 @@
+PASS agency nav has Socials entries
+PASS sections and import warning listed
+PASS import warning has all three actions
+PASS original URL kept after failed import
+PASS creator preview renders
+PASS review inbox lists the submission
+PASS status filter works
+PASS detail shows clean + music players
+PASS redo request sent with note
+PASS no page errors 
+0 failure(s)
+exit 0

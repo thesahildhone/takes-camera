@@ -1,0 +1,38 @@
+PASS home ring shows shots to go: 3 left 3 shots to go  0 of 3 sent in total
+PASS Talking heads list has 2 numbered shots (2)
+PASS numbering starts at 01
+PASS Dances tab shows its 1 shot
+PASS OF toggle shows the existing OF view
+PASS detail shows "Shot 1 of 2"
+PASS script card shown
+PASS instructions shown
+PASS bottom actions present
+PASS actions pinned inside viewport
+PASS teleprompter visible
+PASS camera opened straight from Film it in light mode (no filter) ['visible', 'hidden']
+PASS smoothing toggle switches to the filtered camera ['hidden', 'visible']
+PASS 3 clips recorded
+PASS draft autosaved in IndexedDB with 3 non-empty clips [152978, 153084, 490548]
+PASS retake replaced only clip 2; A and C unchanged, order A, B-new, C
+PASS clips 1 and 3 bytes identical after retake
+PASS delete removed a clip
+PASS undo restored it
+PASS after closing, the shot shows "Continue · 3 clips saved"
+PASS draft survives a page reload
+edit view total 29.4
+PASS clean video uploaded to agency/sub/project/creator path (22222222-2222-4222-8222-222222222222/sub/ccccccc1-0000-4000-8000-000000000001/11111111-1111-4111-8111-111111111111/b2bf064d-d8f7-432e-adf9-6e48c746bf41-clean.mp4, 985044 bytes)
+PASS social_submit called once, clean only, 3 clips
+PASS assembled duration = trimmed total (29.4s vs 29.4s)
+PASS page shows sent / waiting for review
+PASS actual joined file length matches the timeline (29.4s vs 29.4s)
+PASS local draft cleared after confirmed send
+PASS dance shot explains the sound
+PASS cue advanced to where clip 2 ended: Sound starts at 0:02 of 1:00
+PASS clip 2 starts in the sound where clip 1 ended [[-0.030100000000093132, 2.54885], [2.48864999999993, 2.54865]]
+PASS licensed dance uploads clean + music versions ['fb850856-aac7-4ce9-a665-f9a962f8dbb3-clean.mp4', 'fb850856-aac7-4ce9-a665-f9a962f8dbb3-mix.mp4']
+PASS submission links the music version
+
+console errors:
+
+0 failure(s)
+exit 0

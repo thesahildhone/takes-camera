@@ -21,15 +21,22 @@ export function Welcome() {
 
 export function AuthPage() {
   const [q] = useSearchParams(); const nav = useNavigate(); const { session, refresh } = useAuth()
-  const [mode, setMode] = useState<'signin' | 'signup'>(q.get('mode') === 'signup' ? 'signup' : 'signin')
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(q.get('mode') === 'signup' ? 'signup' : 'signin')
+  const [sent, setSent] = useState(false)
   const [kind, setKind] = useState<'business' | 'creator'>(q.get('kind') === 'business' ? 'business' : 'creator')
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [pw, setPw] = useState('')
-  const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(q.get('linkerr') ? 'That email link has expired or was already used. Ask for a new one.' : null)
   const next = q.get('next') || '/'
   useEffect(() => { if (session) nav(next, { replace: true }) }, [session, next, nav])
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(null); setBusy(true)
     try {
+      if (mode === 'forgot') {
+        const { error } = await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: location.origin + location.pathname })
+        if (error && !/rate|too many/i.test(error.message)) throw error
+        if (error) throw new Error('Too many reset emails. Wait a few minutes and try again.')
+        setSent(true); return
+      }
       if (mode === 'signup') {
         if (!name.trim()) throw new Error('Add your name')
         const { data: su, error } = await sb.auth.signUp({ email: email.trim(), password: pw, options: { data: { full_name: name.trim(), kind } } })
@@ -47,20 +54,46 @@ export function AuthPage() {
   }
   return <div className="public"><form className="box" onSubmit={submit}>
     <Brand />
-    <h1>{mode === 'signup' ? (kind === 'business' ? 'Set up your agency' : 'Create your creator account') : 'Sign in'}</h1>
+    <h1>{mode === 'forgot' ? 'Reset your password' : mode === 'signup' ? (kind === 'business' ? 'Set up your agency' : 'Create your creator account') : 'Sign in'}</h1>
+    {mode === 'forgot' && sent && <p role="status">If there's an account for <b>{email}</b>, a reset link is on its way. Open it on this device. Check spam if it isn't there in a few minutes.</p>}
     {mode === 'signup' && <div className="seg" role="group" aria-label="Account type">
       <button type="button" aria-pressed={kind === 'business'} onClick={() => setKind('business')}>Agency</button>
       <button type="button" aria-pressed={kind === 'creator'} onClick={() => setKind('creator')}>Creator</button>
     </div>}
     {mode === 'signup' && <label className="field"><span>Your name</span><input id="name" className="input" value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>}
     <label className="field"><span>Email</span><input id="email" className="input" type="email" required value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" /></label>
-    <label className="field"><span>Password</span><input id="password" className="input" type="password" required minLength={mode === 'signup' ? 8 : undefined} value={pw} onChange={e => setPw(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>
+    {mode !== 'forgot' && <label className="field"><span>Password</span><input id="password" className="input" type="password" required minLength={mode === 'signup' ? 8 : undefined} value={pw} onChange={e => setPw(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>}
+    {mode === 'signin' && <button type="button" className="link" style={{ justifySelf: 'start', fontSize: 14 }} onClick={() => { setMode('forgot'); setErr(null); setSent(false) }}>Forgot your password?</button>}
     <ErrorBox msg={err} />
-    <button className="btn lg primary block" disabled={busy}>{busy ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
+    {!(mode === 'forgot' && sent) && <button className="btn lg primary block" disabled={busy}>{busy ? 'One moment…' : mode === 'forgot' ? 'Email me a reset link' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>}
     <p className="muted" style={{ textAlign: 'center' }}>
-      {mode === 'signup' ? <>Have an account? <button type="button" className="link" onClick={() => setMode('signin')}>Sign in</button></>
+      {mode === 'signup' || mode === 'forgot' ? <>{mode === 'forgot' ? 'Remembered it?' : 'Have an account?'} <button type="button" className="link" onClick={() => setMode('signin')}>Sign in</button></>
         : <>New here? <button type="button" className="link" onClick={() => setMode('signup')}>Create an account</button></>}
     </p>
+  </form></div>
+}
+
+export function ResetPage() {
+  const nav = useNavigate(); const { session, ready } = useAuth()
+  const [pw, setPw] = useState(''); const [pw2, setPw2] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null)
+  async function submit(e: FormEvent) {
+    e.preventDefault(); setErr(null)
+    if (pw.length < 8) return setErr('Use at least 8 characters.')
+    if (pw !== pw2) return setErr('The two passwords are different.')
+    setBusy(true)
+    const { error } = await sb.auth.updateUser({ password: pw })
+    setBusy(false)
+    if (error) return setErr(errMsg(error))
+    nav('/', { replace: true })
+  }
+  if (!ready) return <div className="public"><Loading /></div>
+  if (!session) return <div className="public"><div className="box"><Brand /><h1>Link expired</h1><p className="muted">This reset link has expired or was already used.</p><button className="btn primary block" onClick={() => nav('/auth')}>Ask for a new link</button></div></div>
+  return <div className="public"><form className="box" onSubmit={submit}>
+    <Brand /><h1>Choose a new password</h1>
+    <label className="field"><span>New password</span><input className="input" type="password" autoComplete="new-password" required minLength={8} value={pw} onChange={e => setPw(e.target.value)} /></label>
+    <label className="field"><span>Type it again</span><input className="input" type="password" autoComplete="new-password" required value={pw2} onChange={e => setPw2(e.target.value)} /></label>
+    <ErrorBox msg={err} />
+    <button className="btn lg primary block" disabled={busy}>{busy ? 'Saving…' : 'Save and sign in'}</button>
   </form></div>
 }
 

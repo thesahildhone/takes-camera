@@ -26,7 +26,20 @@ function platformOf(u: URL) {
 }
 const NAME: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube' }
 function blockedHost(h: string) {
-  return h === 'localhost' || /^(\d+\.){3}\d+$/.test(h) || h.includes(':') || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('supabase.co')
+  h = h.toLowerCase().replace(/\.$/, '')
+  return h === 'localhost' || h.endsWith('.localhost') || /^[\d.]+$/.test(h) || /^0x/i.test(h) || h.includes(':') || h.startsWith('[')
+    || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.lan') || h.endsWith('supabase.co') || h.endsWith('supabase.in') || !h.includes('.')
+}
+// Follow redirects one hop at a time so a public link cannot bounce the server to a private address.
+async function safeFetch(start: URL, timeoutMs: number): Promise<Response> {
+  let url = start
+  for (let hop = 0; hop < 5; hop++) {
+    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || blockedHost(url.hostname)) throw new Error('blocked')
+    const r = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) })
+    if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { try { await r.body?.cancel() } catch { /* */ } url = new URL(r.headers.get('location')!, url); continue }
+    return r
+  }
+  throw new Error('too many redirects')
 }
 
 // Different downloader actors name the file field differently, so look for the likely ones, then anything that looks like a video file.
@@ -48,6 +61,14 @@ function findVideoUrl(items: unknown): string | null {
   walk(items, '', 0)
   hits.sort((a, b) => b.score - a.score)
   return hits[0]?.url || null
+}
+
+// Paid services are capped per agency per hour, so a leaked login or a stuck script cannot run up the bill.
+// deno-lint-ignore no-explicit-any
+async function overLimit(admin: any, ws: string, action: string, max: number) {
+  const since = new Date(Date.now() - 3600e3).toISOString()
+  const { count } = await admin.from('audit_events').select('id', { count: 'exact', head: true }).eq('workspace_id', ws).eq('action', action).gte('created_at', since)
+  return (count || 0) >= max
 }
 
 async function viaApify(link: string, plat: string): Promise<{ url?: string; error?: string }> {
@@ -87,6 +108,7 @@ Deno.serve(async req => {
     if (!p) return json({ error: 'Project not found' }, 404)
     if (!OPENAI) return json({ ok: false, code: 'no_key', error: 'Automatic transcripts are not switched on yet.' })
     if (!(file instanceof File) || !file.size) return json({ ok: false, error: 'No audio received.' })
+    if (await overLimit(admin, p.workspace_id, 'social.reference.transcribed', 60)) return json({ ok: false, error: 'That is a lot of transcripts in one hour. Try again a little later.' })
     if (file.size > 25 * 1024 * 1024) return json({ ok: false, code: 'too_big', error: 'The audio is too long to transcribe automatically (limit is about 12 minutes).' })
     const out = new FormData()
     out.append('file', file, file.name || 'audio.wav'); out.append('model', 'whisper-1'); out.append('response_format', 'verbose_json')
@@ -127,6 +149,7 @@ Deno.serve(async req => {
   if (plat === 'youtube') return fail("YouTube links show as an embedded player. Upload the file if you need the script or sound pulled out.", 'awaiting_upload')
   if (plat === 'instagram' || plat === 'tiktok') {
     if (!APIFY) return fail(`Automatic ${NAME[plat]} downloads are not switched on yet. The link shows as an embedded player, or upload the video file.`, 'awaiting_upload')
+    if (await overLimit(admin, p.workspace_id, 'social.reference.imported', 60)) return fail('That is a lot of imports in one hour. Try again a little later, or upload the file.', 'awaiting_upload')
     const got = await viaApify(u.toString(), plat)
     if (!got.url) return fail(got.error || 'Download failed.', 'awaiting_upload')
     try { src = new URL(got.url) } catch { return fail('The download service sent back a bad file link.', 'awaiting_upload') }
@@ -134,7 +157,7 @@ Deno.serve(async req => {
   }
   if (blockedHost(src.hostname)) return fail('This address cannot be imported.')
   let r: Response
-  try { r = await fetch(src, { redirect: 'follow', signal: AbortSignal.timeout(25000) }) } catch { return fail('The video file did not download. Try again, or upload the file.', fromService ? 'awaiting_upload' : 'failed') }
+  try { r = await safeFetch(src, 25000) } catch (e) { return fail((e as Error).message === 'blocked' ? 'This address cannot be imported.' : 'The video file did not download. Try again, or upload the file.', fromService ? 'awaiting_upload' : 'failed') }
   if (r.status === 401 || r.status === 403) return fail(`The site refused access (${r.status}). Upload a copy instead.`, 'awaiting_upload')
   if (!r.ok || !r.body) return fail(`The site returned an error (${r.status}).`, fromService ? 'awaiting_upload' : 'failed')
   const type = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()

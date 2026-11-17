@@ -27,7 +27,7 @@ export default function ReviewDetail() {
     if (!data) return
     const cur = data.files.filter(f => f.is_current)
     if (!cur.length) return
-    sb.storage.from('media').createSignedUrls(cur.map(f => f.storage_path), 3600).then(({ data: s }) => {
+    sb.storage.from('media').createSignedUrls(cur.map(f => f.storage_path), 1800).then(({ data: s }) => {
       const m: Record<string, string> = {}; (s || []).forEach(x => { if (x.signedUrl && x.path) m[x.path] = x.signedUrl }); setUrls(m)
     })
   }, [data])

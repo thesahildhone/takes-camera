@@ -69,7 +69,7 @@ export function parseRef(url: string | null): Ref | null {
 export async function signed(paths: (string | null | undefined)[], bucket = 'social'): Promise<Record<string, string>> {
   const list = [...new Set(paths.filter(Boolean) as string[])]
   if (!list.length) return {}
-  const { data } = await sb.storage.from(bucket).createSignedUrls(list, 3600)
+  const { data } = await sb.storage.from(bucket).createSignedUrls(list, 1800)
   const m: Record<string, string> = {}
   ;(data || []).forEach(x => { if (x.path && x.signedUrl) m[x.path] = x.signedUrl })
   return m

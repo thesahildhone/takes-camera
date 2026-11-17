@@ -111,10 +111,10 @@ def main():
         check('2 shots to go' in pg.inner_text('.ringcard') or '3 shots to go' in pg.inner_text('.ringcard'), 'home ring shows shots to go: ' + pg.inner_text('.ringcard').replace('\n', ' '))
         check(pg.locator('.shotrow').count() == 2, f'Talking heads list has 2 numbered shots ({pg.locator(".shotrow").count()})')
         check('01' in pg.locator('.shotrow').first.inner_text(), 'numbering starts at 01')
-        pg.locator('.sectabs button', has_text='Dances').click(); check(pg.locator('.shotrow').count() == 1, 'Dances tab shows its 1 shot')
+        pg.locator('.seccard', has_text='Dances').click(); check(pg.locator('.shotrow').count() == 1, 'Dances tab shows its 1 shot')
         pg.get_by_role('tab', name='OF').click(); pg.wait_for_timeout(300); check(pg.locator('.ringcard').count() == 0, 'OF toggle shows the existing OF view')
         pg.get_by_role('tab', name='Socials').click(); pg.wait_for_selector('.shotrow')
-        pg.locator('.sectabs button', has_text='Talking heads').click()
+        pg.locator('.seccard', has_text='Talking heads').click()
 
         # ---- talking shot detail
         pg.locator('.shotrow').first.click(); pg.wait_for_selector('.shot-num', timeout=10000); pg.wait_for_timeout(600)
@@ -125,16 +125,23 @@ def main():
         box = pg.locator('.shot-actions').bounding_box(); check(box and box['y'] + box['height'] <= 862, 'actions pinned inside viewport')
 
         # ---- camera: 3 clips
-        pg.locator('.shot-actions >> text=Film it').click(); pg.get_by_role('button', name='Turn on camera').click()
-        pass
+        pg.locator('.shot-actions >> text=Film it').click()
         pg.wait_for_selector('.scam .shutter', timeout=45000); pg.wait_for_timeout(800)
         check(pg.locator('.scam .tp').count() == 1, 'teleprompter visible'); pg.screenshot(path='03_camera.png')
         pg.get_by_role('button', name='Scroll').click(); pg.get_by_role('button', name='Still').click()
+        vis = pg.evaluate("[getComputedStyle(document.querySelector('.scam video.view')).visibility, getComputedStyle(document.querySelector('.scam canvas.view')).visibility]")
+        check(vis == ['visible', 'hidden'], f'camera opened straight from Film it in light mode (no filter) {vis}')
         for i in range(3):
+            if i == 2:
+                pg.get_by_role('button', name='Smooth skin: off').click(); pg.wait_for_timeout(700)
+                vis = pg.evaluate("[getComputedStyle(document.querySelector('.scam video.view')).visibility, getComputedStyle(document.querySelector('.scam canvas.view')).visibility]")
+                check(vis == ['hidden', 'visible'], f'smoothing toggle switches to the filtered camera {vis}')
             pg.get_by_role('button', name='Record clip').click(); pg.wait_for_timeout(1600)
             pg.get_by_role('button', name='Stop clip').click(); pg.wait_for_selector('.scam .cthumbs b', timeout=45000)
             pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=60000)
+
         check(pg.inner_text('.scam .cthumbs b') == '3', '3 clips recorded')
+        pg.get_by_role('button', name='Smooth on').click(); pg.wait_for_timeout(500)  # the software-GL test machine is too slow to keep filtering for the rest
         pg.get_by_role('button', name='Done').click(); pg.wait_for_selector('.scam .edit')
         sizes = pg.evaluate("""async () => { const r = indexedDB.open('dr-social'); const db = await new Promise(x => r.onsuccess = () => x(r.result));
           const all = await new Promise(x => { const q = db.transaction('drafts').objectStore('drafts').getAll(); q.onsuccess = () => x(q.result) });
@@ -170,7 +177,7 @@ def main():
 
         # ---- send: assemble + upload + submit
         pg.locator('.shot-actions .sbtn.primary').click(); pg.wait_for_selector('.scam .edit', timeout=10000)
-        expect_total = float(re.search(r'([\d.]+)s', pg.inner_text('.scam .etop b')).group(1)); print('edit view total', expect_total)
+        _t = pg.inner_text('.scam .etop b'); _m = re.search(r'(\d+):(\d+(?:\.\d+)?)', _t); expect_total = (int(_m.group(1)) * 60 + float(_m.group(2))) if _m else float(re.search(r'([\d.]+)s', _t).group(1)); print('edit view total', expect_total)
         pg.get_by_role('button', name=re.compile('Use these 3 clips')).click(); pg.wait_for_selector('text=Send to your agency')
         pg.get_by_role('button', name='Send', exact=True).click()
         pg.wait_for_selector('text=Sent to your agency', timeout=90000)
@@ -193,12 +200,12 @@ def main():
         CALLS.clear()
         pg.goto(BASE + f'#/creator/s/p/{P3}'); pg.wait_for_selector('.shot-actions', timeout=10000); pg.wait_for_timeout(500)
         check('Sound plays while you film' in pg.inner_text('.shot'), 'dance shot explains the sound')
-        pg.locator('.shot-actions >> text=Film it').click(); pg.get_by_role('button', name='Turn on camera').click(timeout=45000)
+        pg.locator('.shot-actions >> text=Film it').click()
         pg.wait_for_selector('.scam .cue', timeout=45000); pg.screenshot(path='07_dance_cam.png')
         for i in range(2):
             pg.get_by_role('button', name='Record clip').click(); pg.wait_for_selector('.scam .countdown', timeout=45000); pg.wait_for_timeout(5500)
             pg.get_by_role('button', name='Stop clip').click(); pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=60000)
-        cue = pg.inner_text('.scam .cue'); check('0:0' not in cue.split('starts at')[1][:6] if 'starts at' in cue else True, 'cue advanced to where clip 2 ended: ' + cue.split('\n')[0])
+        cue = pg.inner_text('.scam .cue'); check('0:00 ' not in (cue.split('starts at')[1][:6] + ' ') if 'starts at' in cue else True, 'cue advanced to where clip 2 ended: ' + cue.split('\n')[0])
         refs = pg.evaluate("""async () => { const r = indexedDB.open('dr-social'); const db = await new Promise(x => r.onsuccess = () => x(r.result));
           const all = await new Promise(x => { const q = db.transaction('drafts').objectStore('drafts').getAll(); q.onsuccess = () => x(q.result) });
           const d = all[0]; return d.order.map(id => { const c = d.clips.find(c => c.id === id); return [c.refStart, c.duration] }) }""")

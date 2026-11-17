@@ -12,7 +12,8 @@ export default function Account() {
   async function save() { const { error } = await sb.from('profiles').update({ full_name: name.trim() }).eq('id', profile!.id); if (error) toast(errMsg(error)); else { toast('Saved'); refresh() } }
   async function doDelete() {
     setDelErr(null)
-    const { error } = await sb.rpc('delete_my_account', { confirm: confirm.trim() })
+    const { data, error: fe } = await sb.functions.invoke('account-delete', { body: { confirm: confirm.trim() } })
+    const error = fe ? new Error(await fe.context?.json?.().then((j: { error?: string }) => j.error).catch(() => null) || fe.message) : (data?.error ? new Error(data.error) : null)
     if (error) return setDelErr(errMsg(error))
     await sb.auth.signOut().catch(() => {}); location.hash = '#/'; location.reload()
   }
@@ -32,7 +33,7 @@ export default function Account() {
       <button className="link" style={{ justifySelf: 'center', color: 'var(--bad)', fontSize: 14 }} onClick={() => { setDel(true); setConfirm(''); setDelErr(null) }}>Delete my account</button>
     </div>
     {del && <Modal center title="Delete your account?" onClose={() => setDel(false)}>
-      <p className="muted">This removes your login, your assignments and your submission history, and takes you out of every agency, straight away. It can't be undone. Agencies keep any files they already downloaded. To have stored video files erased as well, email support after deleting.</p>
+      <p className="muted">This removes your login, your assignments and your submission history, and takes you out of every agency, straight away. It can't be undone. Every video and photo you sent is erased from our storage too. Agencies keep copies they already downloaded to their own devices.</p>
       <label className="field"><span>Type DELETE to confirm</span><input className="input" value={confirm} onChange={e => setConfirm(e.target.value)} autoCapitalize="characters" /></label>
       {delErr && <p role="alert" style={{ color: 'var(--bad)' }}>{delErr}</p>}
       <div className="row"><button className="btn ghost grow" onClick={() => setDel(false)}>Keep my account</button><button className="btn danger grow" disabled={confirm.trim() !== 'DELETE'} onClick={doDelete}>Delete</button></div></Modal>}

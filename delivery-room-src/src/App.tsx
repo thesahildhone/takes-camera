@@ -4,6 +4,7 @@ import { ToastProvider, Loading } from './lib/ui'
 import { AuthPage, InvitePage, ResetPage, SetupPage, Welcome } from './Public'
 import AgencyApp from './agency/AgencyApp'
 import CreatorApp from './creator/CreatorApp'
+import { MfaGate } from './components/TwoStep'
 
 function Home() {
   const { session, profile, staff, ready } = useAuth()
@@ -20,9 +21,14 @@ function Guard({ children }: { children: JSX.Element }) {
   if (!session) return <Navigate to={'/auth?next=' + encodeURIComponent(loc.pathname)} replace />
   return children
 }
+function Gate({ children }: { children: JSX.Element }) {
+  const { session, ready, mfa } = useAuth(); const loc = useLocation()
+  if (ready && session && mfa !== 'ok' && loc.pathname !== '/reset') return <MfaGate />
+  return children
+}
 export default function App() {
   return <AuthProvider><ToastProvider>
-    <HashRouter>
+    <HashRouter><Gate>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<AuthPage />} />
@@ -33,6 +39,6 @@ export default function App() {
         <Route path="/creator/*" element={<Guard><CreatorApp /></Guard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </HashRouter>
+    </Gate></HashRouter>
   </ToastProvider></AuthProvider>
 }

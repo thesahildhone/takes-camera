@@ -7,6 +7,8 @@ export interface StaffWs { id: string; name: string; role: 'owner' | 'admin' | '
 export interface CreatorWs { id: string; name: string; status: string }
 interface Ctx {
   session: Session | null; profile: Profile | null; ready: boolean
+  /** ok = signed in fully; challenge = enter the code from the authenticator app; setup = agency requires two-step login and none is set up */
+  mfa: 'ok' | 'challenge' | 'setup'
   staff: StaffWs[]; creatorOf: CreatorWs[]
   wsId: string | null; setWsId: (id: string) => void
   refresh: () => Promise<void>; signOut: () => Promise<void>
@@ -20,11 +22,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState<StaffWs[]>([])
   const [creatorOf, setCreatorOf] = useState<CreatorWs[]>([])
   const [ready, setReady] = useState(false)
+  const [mfa, setMfa] = useState<Ctx['mfa']>('ok')
   const [wsId, setWsIdState] = useState<string | null>(() => { try { return localStorage.getItem(WS_KEY) } catch { return null } })
 
   const load = useCallback(async (s: Session | null) => {
-    if (!s) { setProfile(null); setStaff([]); setCreatorOf([]); setReady(true); return }
+    if (!s) { setProfile(null); setStaff([]); setCreatorOf([]); setMfa('ok'); setReady(true); return }
     const uid = s.user.id
+    const [aal, req] = await Promise.all([sb.auth.mfa.getAuthenticatorAssuranceLevel().catch(() => ({ data: null })), sb.rpc('my_mfa_required')])
+    const cur = aal.data?.currentLevel, next = aal.data?.nextLevel
+    setMfa(cur === 'aal2' ? 'ok' : next === 'aal2' ? 'challenge' : req.data === true ? 'setup' : 'ok')
     const [p, wm, cm] = await Promise.all([
       sb.from('profiles').select('*').eq('id', uid).maybeSingle(),
       sb.from('workspace_members').select('role, title, workspaces(id,name,status)').eq('user_id', uid),
@@ -44,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sb.auth.getSession().then(({ data }) => { setSession(data.session); load(data.session) })
     const { data: sub } = sb.auth.onAuthStateChange((ev, s) => {
       // hold routing until the profile for this session is loaded, otherwise a brand-new agency gets sent to the creator side
-      if (ev === 'SIGNED_IN' || ev === 'SIGNED_OUT' || ev === 'USER_UPDATED') { setReady(false); setSession(s); load(s) } else setSession(s)
+      if (ev === 'SIGNED_IN' || ev === 'SIGNED_OUT' || ev === 'USER_UPDATED' || ev === 'MFA_CHALLENGE_VERIFIED') { setReady(false); setSession(s); load(s) } else setSession(s)
     })
     return () => sub.subscription.unsubscribe()
   }, [load])
@@ -52,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setWsId = (id: string) => { setWsIdState(id); try { localStorage.setItem(WS_KEY, id) } catch { /* ignore */ } }
   const refresh = useCallback(async () => { const { data } = await sb.auth.getSession(); await load(data.session) }, [load])
   const signOut = async () => { await sb.auth.signOut(); setSession(null); await load(null) }
-  return <AuthCtx.Provider value={{ session, profile, ready, staff, creatorOf, wsId, setWsId, refresh, signOut }}>{children}</AuthCtx.Provider>
+  return <AuthCtx.Provider value={{ session, profile, ready, mfa, staff, creatorOf, wsId, setWsId, refresh, signOut }}>{children}</AuthCtx.Provider>
 }
 export const useAuth = () => useContext(AuthCtx)
 export const useWs = () => { const a = useAuth(); const ws = a.staff.find(w => w.id === a.wsId) || null; return { ws, isAdmin: !!ws && ws.role !== 'reviewer' } }

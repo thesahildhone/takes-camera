@@ -4,6 +4,7 @@ import { useAuth, useWs } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, useToast } from '../lib/ui'
 import { fmtBytes, fmtDate } from '../lib/types'
 import PasswordCard from '../components/PasswordCard'
+import { TwoStepCard } from '../components/TwoStep'
 
 export default function Settings() {
   const { ws, isAdmin } = useWs(); const { refresh } = useAuth(); const toast = useToast()
@@ -13,13 +14,14 @@ export default function Settings() {
       sb.rpc('workspace_usage', { ws: ws!.id }),
       sb.from('categories').select('id,name,position').eq('workspace_id', ws!.id).order('position'),
       sb.from('audit_events').select('*').eq('workspace_id', ws!.id).order('created_at', { ascending: false }).limit(40),
-      sb.from('workspaces').select('skip_incomplete_default').eq('id', ws!.id).single(),
+      sb.from('workspaces').select('skip_incomplete_default,require_mfa').eq('id', ws!.id).single(),
     ])
-    return { usage: ((u.data as unknown[]) || [])[0] as { files: number; bytes: number; creators: number; assignments_open: number } | undefined, cats: (c.data || []) as { id: string; name: string }[], audit: (au.data || []) as { id: number; action: string; target: string; created_at: string; meta: Record<string, unknown> }[], skip: !!w.data?.skip_incomplete_default }
+    return { usage: ((u.data as unknown[]) || [])[0] as { files: number; bytes: number; creators: number; assignments_open: number } | undefined, cats: (c.data || []) as { id: string; name: string }[], audit: (au.data || []) as { id: number; action: string; target: string; created_at: string; meta: Record<string, unknown> }[], skip: !!w.data?.skip_incomplete_default, requireMfa: !!w.data?.require_mfa }
   }, [ws?.id])
   async function rename() { const { error } = await sb.from('workspaces').update({ name: name.trim() }).eq('id', ws!.id); if (error) toast(errMsg(error)); else { toast('Saved'); refresh() } }
   async function renameCat(id: string, n: string) { if (!n.trim()) return; const { error } = await sb.from('categories').update({ name: n.trim() }).eq('id', id); if (error) toast(errMsg(error)); else reload() }
   async function delCat(id: string) { const { error } = await sb.from('categories').delete().eq('id', id); if (error) toast(errMsg(error)); else { toast('Label removed. Templates using it now have no label.'); reload() } }
+  async function setReq(v: boolean) { const { error } = await sb.rpc('set_require_mfa', { ws: ws!.id, req: v }); if (error) toast(errMsg(error)); else { toast(v ? 'Two-step login is now required for your team' : 'Two-step login is now optional'); reload() } }
   if (loading) return <Loading />
   if (error || !data) return <ErrorBox msg={error} />
   return <>
@@ -27,6 +29,11 @@ export default function Settings() {
     <section className="card stack"><h3>Workspace</h3>
       <div className="row wrap"><input id="wsn" className="input" style={{ maxWidth: 320 }} value={name} disabled={!isAdmin} onChange={e => setName(e.target.value)} /><button className="btn ghost" disabled={!isAdmin || !name.trim() || name === ws?.name} onClick={rename}>Rename</button></div>
     </section>
+    <TwoStepCard />
+    {isAdmin && <section className="card stack"><h3>Team security</h3>
+      <label className="row" style={{ gap: 10 }}><input type="checkbox" checked={data.requireMfa} onChange={e => setReq(e.target.checked)} />
+        <span>Require two-step login for everyone on the team</span></label>
+      <p className="muted" style={{ fontSize: 13 }}>Teammates without it are asked to set it up the next time they open the app, and can't see any agency data until they do. Turn it on for your own account first. Creators aren't affected.</p></section>}
     <section className="card stack"><h3>Usage</h3>
       <div className="stats"><div className="stat"><b>{fmtBytes(Number(data.usage?.bytes || 0))}</b><span>Stored</span></div><div className="stat"><b>{data.usage?.files || 0}</b><span>Files</span></div><div className="stat"><b>{data.usage?.creators || 0}</b><span>Active creators</span></div><div className="stat"><b>{data.usage?.assignments_open || 0}</b><span>Open assignments</span></div></div>
       <p className="muted" style={{ fontSize: 13 }}>Free during the trial.</p></section>

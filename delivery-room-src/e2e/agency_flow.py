@@ -46,6 +46,16 @@ with sync_playwright() as pw:
     pg.get_by_role('button', name='Request redo').click(); pg.fill('#rv-note', 'Smile more in the hook'); pg.get_by_role('button', name='Send back for redo').click(); pg.wait_for_timeout(800)
     rv = [c for c in cf.CALLS if c[0] == 'rpc' and c[1] == 'social_review']
     check(rv and rv[0][2] == {'sub': 'eeeeeee1-0000-4000-8000-000000000001', 'act': 'revise', 'note': 'Smile more in the hook'}, 'redo request sent with note')
+    pg.goto(BASE + '#/agency/social-review'); pg.wait_for_selector('select[aria-label="Status"]', timeout=10000)
+    pg.select_option('select[aria-label="Status"]', '')
+    btn = pg.get_by_role('button', name=re.compile(r'Download 3 files'))
+    check(btn.count() == 1, 'bulk download offers 3 files (2 original clips + music version) for the filtered list')
+    got = []; pg.on('download', lambda d: got.append(d.suggested_filename))
+    n0 = len([c for c in cf.CALLS if c[0] == 'rpc' and c[1] == 'log_social_download'])
+    btn.click(); pg.wait_for_selector('text=Downloads finished', timeout=20000); pg.wait_for_timeout(800)
+    logs_b = [c for c in cf.CALLS if c[0] == 'rpc' and c[1] == 'log_social_download'][n0:]
+    check(sorted(x.rsplit('_', 1)[1] for x in got) == ['clip1.mp4', 'clip2.mp4', 'music.mp4'], f'all 3 files downloaded with readable names {got}')
+    check(len(logs_b) == 3 and all('(bulk)' in c[2]['what'] for c in logs_b), 'each bulk download is logged')
     check(not errs, 'no page errors ' + '; '.join(errs[:3]))
     b.close()
 print(len(fails), 'failure(s)')

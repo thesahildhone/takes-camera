@@ -140,7 +140,7 @@ def main():
                 pg.get_by_role('button', name='Smooth skin: off').click(); pg.wait_for_timeout(700)
                 vis = pg.evaluate("[getComputedStyle(document.querySelector('.scam video.view')).visibility, getComputedStyle(document.querySelector('.scam canvas.view')).visibility]")
                 check(vis == ['hidden', 'visible'], f'smoothing toggle switches to the filtered camera {vis}')
-            pg.get_by_role('button', name='Record clip').click(); pg.wait_for_timeout(1600)
+            pg.get_by_role('button', name='Record clip').click(no_wait_after=True, timeout=90000); pg.wait_for_timeout(1600)
             pg.get_by_role('button', name='Stop clip').click(no_wait_after=True, timeout=90000); pg.wait_for_selector('.scam .cthumbs b', timeout=90000)
             pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=60000)
 

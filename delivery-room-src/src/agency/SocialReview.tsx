@@ -24,6 +24,7 @@ export function SocialInbox() {
   const { ws } = useWs()
   const st = useStructure(ws!.id)
   const [fl, setFl] = useState({ creator: '', type: '', section: '', project: '', status: 'submitted', latest: true })
+  const [bulk, setBulk] = useState<null | { done: number; total: number; failed: number; stop: { v: boolean } }>(null)
   const { data, loading, error } = useAsync(async () => {
     const { data, error } = await sb.from('social_submissions').select('*, profiles!social_submissions_profile_fk(full_name,email)').eq('workspace_id', ws!.id).order('created_at', { ascending: false }).limit(500)
     if (error) {
@@ -53,6 +54,28 @@ export function SocialInbox() {
   if (loading || st.loading) return <Loading />
   if (error) return <ErrorBox msg={error} />
   const set = (k: keyof typeof fl, v: string | boolean) => setFl(x => ({ ...x, [k]: v }))
+  const nm = (x: string) => x.replace(/[^A-Za-z0-9]+/g, '').slice(0, 40) || 'Item'
+  const ext = (path: string) => path.split('.').pop() || 'mp4'
+  // Every file the current filters cover: untouched original clips when we have them, otherwise the single video, plus any music version.
+  const files = rows.flatMap(r => {
+    const p = proj(r.project_id), s = sec(p?.section_id), t = S?.types.find(x => x.id === s?.content_type_id)
+    const base = `${nm(r.profiles?.full_name || 'Creator')}_${nm(t?.name || '')}_${nm(s?.title || '')}_${nm(p?.title || '')}_v${r.version}`
+    const o = originalsOf(r)
+    const list = o.length ? o.map((c, i) => ({ sub: r.id, path: c.path, name: `${base}_clip${i + 1}.${ext(c.path)}`, what: `original clip ${i + 1}`, size: c.size }))
+      : [{ sub: r.id, path: r.clean_path, name: `${base}.${ext(r.clean_path)}`, what: 'original video', size: r.size_bytes }]
+    if (r.mix_path) list.push({ sub: r.id, path: r.mix_path, name: `${base}_music.${ext(r.mix_path)}`, what: 'music version', size: Number(r.meta?.mix_size) || 0 })
+    return list
+  })
+  async function downloadAll() {
+    const stop = { v: false }; setBulk({ done: 0, total: files.length, stop, failed: 0 })
+    let failed = 0
+    for (let i = 0; i < files.length && !stop.v; i++) {
+      const f = files[i]
+      try { await downloadOriginal(f.path, f.name); sb.rpc('log_social_download', { sub: f.sub, what: f.what + ' (bulk)' }).then(() => {}) } catch { failed++ }
+      setBulk({ done: i + 1, total: files.length, stop, failed })
+      await new Promise(r => setTimeout(r, 1200))   // browsers drop downloads fired too close together
+    }
+  }
 
   return <>
     <div className="page-title"><div><h1>Socials review</h1><p className="muted" style={{ marginTop: 4 }}>Every video creators send for your Socials shots.</p></div><Link className="btn ghost" to="/agency/socials">Sections & shots</Link></div>
@@ -63,7 +86,14 @@ export function SocialInbox() {
       <select className="select" aria-label="Section" value={fl.section} onChange={e => setFl(x => ({ ...x, section: e.target.value, project: '' }))}><option value="">All sections</option>{S?.sections.filter(s => !fl.type || s.content_type_id === fl.type).map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select>
       <select className="select" aria-label="Shot" value={fl.project} onChange={e => set('project', e.target.value)}><option value="">All shots</option>{S?.projects.filter(p => (!fl.section || p.section_id === fl.section) && (!fl.type || sec(p.section_id)?.content_type_id === fl.type)).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
       <label className="check"><input type="checkbox" checked={fl.latest} onChange={e => set('latest', e.target.checked)} />Latest version only</label>
+      {files.length > 0 && <button className="btn ghost" onClick={downloadAll}>Download {files.length} file{files.length === 1 ? '' : 's'} ({fmtBytes(files.reduce((n, f) => n + (f.size || 0), 0))})</button>}
     </div>
+    {bulk && <Modal center title={bulk.done < bulk.total && !bulk.stop.v ? 'Downloading originals' : 'Downloads finished'} onClose={() => { bulk.stop.v = true; setBulk(null) }}>
+      <p>{bulk.done} of {bulk.total} started{bulk.failed ? `, ${bulk.failed} failed` : ''}.</p>
+      <div className="bar"><i style={{ width: `${Math.round(bulk.done / bulk.total * 100)}%` }} /></div>
+      <p className="muted" style={{ fontSize: 13 }}>Files are the exact originals, named by creator, section, shot and version. If your browser asks to allow multiple downloads, choose Allow. For hundreds of files, filter by section or creator first.</p>
+      {bulk.done < bulk.total && !bulk.stop.v ? <button className="btn ghost" onClick={() => { bulk.stop.v = true; setBulk({ ...bulk }) }}>Stop</button> : <button className="btn primary" onClick={() => setBulk(null)}>Done</button>}
+    </Modal>}
     {rows.length === 0 ? <div className="empty"><h3>Nothing here</h3><p>{fl.status === 'submitted' ? 'No videos are waiting for review.' : 'Try different filters.'}</p></div> :
       <div className="scroll-x"><table className="table"><thead><tr><th>Creator</th><th>Shot</th><th>Section</th><th>Version</th><th>Files</th><th>Sent</th><th>Status</th></tr></thead><tbody>
         {rows.map(r => { const p = proj(r.project_id), s = sec(p?.section_id), t = S?.types.find(x => x.id === s?.content_type_id)

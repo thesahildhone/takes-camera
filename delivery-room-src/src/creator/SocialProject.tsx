@@ -81,13 +81,14 @@ export default function SocialProject() {
         const res = await assemble({ clips, keepMic: p!.keep_mic, music: licensed ? audio : null, onPct: (pct, stage) => setSending({ stage, pct }) }, primed!)
         const sm = clips.length ? Math.round(clips.reduce((n, c) => n + c.smoothing, 0) / clips.length) : null
         cur = { ...cur, out: { subId: crypto.randomUUID(), clean: res.clean, mix: res.mix, mixNote: res.mixNote ?? (usesAudio(p!.mode) && !licensed ? (p!.rights_status === 'licensed' ? 'Sound unavailable' : 'Music not licensed, clean version only') : null),
-          duration: res.duration, width: res.width, height: res.height, source: 'camera', clips: clips.length, smoothing: sm, uploaded: {} } }
+          duration: res.duration, width: res.width, height: res.height, source: 'camera', clips: clips.length, smoothing: sm, uploaded: {},
+          keepOriginals: !(clips.length === 1 && res.clean === clips[0].blob) } }
         await saveDraft(cur)
       } else if (cur.out.source === 'upload') await saveDraft(cur)
       const o = cur.out!
       const base = `${a!.workspace_id}/sub/${p!.id}/${profile!.id}/${o.subId}`
       const ext = (b: Blob) => b.type.includes('webm') ? 'webm' : b.type.includes('quicktime') ? 'mov' : 'mp4'
-      const put = async (key: 'clean' | 'mix', blob: Blob, label: string) => {
+      const put = async (key: string, blob: Blob, label: string) => {
         if (o.uploaded[key]) return o.uploaded[key]!
         const path = `${base}-${key}.${ext(blob)}`
         const type = blob.type && ['video/mp4', 'video/quicktime', 'video/webm'].includes(blob.type.split(';')[0]) ? blob.type.split(';')[0] : 'video/mp4'
@@ -95,11 +96,19 @@ export default function SocialProject() {
         catch (e) { if (!/exists|duplicate/i.test(errMsg(e))) throw e } // already uploaded on an earlier try
         o.uploaded[key] = path; await saveDraft(cur); return path
       }
-      const clean = await put('clean', o.clean, o.mix ? 'Uploading video 1 of 2…' : 'Uploading…')
-      const mix = o.mix ? await put('mix', o.mix, 'Uploading video 2 of 2 (with music)…') : null
+      // Untouched original clips go up first: they are the footage the agency keeps. The joined video is a convenience copy.
+      const origClips = o.source === 'camera' && o.keepOriginals ? ordered(cur) : []
+      const originals: { path: string; size: number; duration: number; trim_in: number; trim_out: number; width: number; height: number; smoothing: number }[] = []
+      for (let i = 0; i < origClips.length; i++) {
+        const c = origClips[i]
+        const path = await put(`clip-${i + 1}`, c.blob, `Uploading original clip ${i + 1} of ${origClips.length}…`)
+        originals.push({ path, size: c.blob.size, duration: Math.round(c.duration * 100) / 100, trim_in: Math.round(c.trimIn * 100) / 100, trim_out: Math.round(c.trimOut * 100) / 100, width: c.width, height: c.height, smoothing: c.smoothing })
+      }
+      const clean = await put('clean', o.clean, o.mix ? 'Uploading joined video…' : origClips.length ? 'Uploading joined video…' : 'Uploading…')
+      const mix = o.mix ? await put('mix', o.mix, 'Uploading music version…') : null
       setSending({ stage: 'Confirming with your agency…', pct: 100 })
       const { error } = await sb.rpc('social_submit', { sub_id: o.subId, asg: a!.id, clean, mix, mix_note: o.mixNote, m: o.clean.type || 'video/mp4', sz: o.clean.size,
-        dur: Math.round(o.duration * 10) / 10, w: o.width || null, h: o.height || null, sm: o.smoothing, clips: o.clips || null, src: o.source, meta: { mix_size: o.mix?.size ?? null, ...(note.trim() ? { note: note.trim().slice(0, 500) } : {}) } })
+        dur: Math.round(o.duration * 10) / 10, w: o.width || null, h: o.height || null, sm: o.smoothing, clips: o.clips || null, src: o.source, meta: { mix_size: o.mix?.size ?? null, ...(originals.length ? { originals } : {}), ...(note.trim() ? { note: note.trim().slice(0, 500) } : {}) } })
       if (error) throw error
       await dropDraft(a!.id)
       setSending(null); setReview(null); setDraft(null); setNote(''); toast('Sent to your agency'); load()

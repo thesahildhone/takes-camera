@@ -10,7 +10,8 @@ export interface Clip {
 }
 export interface Output {
   subId: string; clean: Blob; mix: Blob | null; mixNote: string | null; duration: number; width: number; height: number
-  source: 'camera' | 'upload'; clips: number; smoothing: number | null; uploaded: { clean?: string; mix?: string }
+  source: 'camera' | 'upload'; clips: number; smoothing: number | null; uploaded: Record<string, string>
+  keepOriginals?: boolean                   // true when the joined video was re-encoded, so the untouched clips are uploaded too
 }
 export interface Draft { key: string; assignmentId: string; clips: Clip[]; order: string[]; updatedAt: number; out?: Output | null }
 

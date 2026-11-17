@@ -66,6 +66,16 @@ export function parseRef(url: string | null): Ref | null {
   return { platform: 'other', embed: null, label: h }
 }
 
+/** Fetch a short-lived link that downloads the exact stored file (no re-encoding) under a readable name. */
+export async function downloadOriginal(path: string, name: string, bucket = 'social') {
+  const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 600, { download: name })
+  if (error || !data?.signedUrl) throw error || new Error('Could not create the download link')
+  const a = document.createElement('a'); a.href = data.signedUrl; a.rel = 'noreferrer'; document.body.appendChild(a); a.click(); a.remove()
+}
+
+export interface OriginalClip { path: string; size: number; duration: number; trim_in: number; trim_out: number; width: number; height: number; smoothing: number }
+export const originalsOf = (s: { meta: Record<string, unknown> }): OriginalClip[] => Array.isArray(s.meta?.originals) ? (s.meta.originals as OriginalClip[]).filter(o => o && typeof o.path === 'string') : []
+
 export async function signed(paths: (string | null | undefined)[], bucket = 'social'): Promise<Record<string, string>> {
   const list = [...new Set(paths.filter(Boolean) as string[])]
   if (!list.length) return {}

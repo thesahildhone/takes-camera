@@ -10,7 +10,7 @@ C = '11111111-1111-4111-8111-111111111111'; WA = '22222222-2222-4222-8222-222222
 T1 = 'aaaaaaa1-0000-4000-8000-000000000001'; SEC1 = 'bbbbbbb1-0000-4000-8000-000000000001'; SEC2 = 'bbbbbbb2-0000-4000-8000-000000000002'
 P1 = 'ccccccc1-0000-4000-8000-000000000001'; P2 = 'ccccccc2-0000-4000-8000-000000000002'; P3 = 'ccccccc3-0000-4000-8000-000000000003'
 A1, A2, A3 = (f'ddddddd{i}-0000-4000-8000-00000000000{i}' for i in (1, 2, 3))
-REF = open('/home/claude/e2e/ref.mp4', 'rb').read(); WAV = open('/home/claude/e2e/ref.wav', 'rb').read()
+REF = open('./ref.mp4', 'rb').read(); WAV = open('./ref.wav', 'rb').read()
 
 def proj(id, sec, title, mode, pos, **kw):
     base = dict(id=id, workspace_id=WA, section_id=sec, title=title, description='', position=pos, mode=mode, instructions='Hook: start talking while you sit down\nSetup: bedroom, face well lit\nExample: https://www.instagram.com/reel/DWmYXSxD5GP/',
@@ -62,13 +62,17 @@ def handle(route):
     hdr = {'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': '*'}
     if req.method == 'OPTIONS': return route.fulfill(status=200, headers=hdr)
     j = lambda body, status=200, extra={}: route.fulfill(status=status, headers={**hdr, 'content-type': 'application/json', **extra}, body=json.dumps(body))
+    if path.startswith('/storage/v1/object/sign/social/') and req.method == 'POST':
+        p = path.split('/object/sign/social/', 1)[1]; CALLS.append(('sign1', p, json.loads(req.post_data or '{}')))
+        return j({'signedURL': f'/object/sign/social/{p}?token=t'})
     if path.startswith('/storage/v1/object/sign/social') and req.method == 'POST':
         paths = json.loads(req.post_data or '{}').get('paths', [])
         return j([{'path': p, 'signedURL': f'/object/sign/social/{p}?token=t', 'error': None} for p in paths])
     if path.startswith('/storage/v1/object/sign/social/'):
         p = path.split('/object/sign/social/', 1)[1]
         body = UPLOADS.get(p) or (WAV if p.endswith('.wav') else REF)
-        return route.fulfill(status=200, headers={**hdr, 'content-type': 'audio/wav' if p.endswith('.wav') else 'video/mp4'}, body=body)
+        dl = q.get('download', [None])[0]
+        return route.fulfill(status=200, headers={**hdr, 'content-type': 'audio/wav' if p.endswith('.wav') else 'video/mp4', **({'content-disposition': f'attachment; filename="{dl}"'} if dl else {})}, body=body)
     if path.startswith('/storage/v1/object/social/') and req.method == 'POST':
         p = path.split('/object/social/', 1)[1]; UPLOADS[p] = unwrap(req.post_data_buffer, req.headers.get('content-type') or ''); CALLS.append(('upload', p, len(req.post_data_buffer or b''), req.headers.get('content-type')))
         return j({'Key': 'social/' + p, 'Id': str(uuid.uuid4())})
@@ -137,7 +141,7 @@ def main():
                 vis = pg.evaluate("[getComputedStyle(document.querySelector('.scam video.view')).visibility, getComputedStyle(document.querySelector('.scam canvas.view')).visibility]")
                 check(vis == ['hidden', 'visible'], f'smoothing toggle switches to the filtered camera {vis}')
             pg.get_by_role('button', name='Record clip').click(); pg.wait_for_timeout(1600)
-            pg.get_by_role('button', name='Stop clip').click(); pg.wait_for_selector('.scam .cthumbs b', timeout=45000)
+            pg.get_by_role('button', name='Stop clip').click(no_wait_after=True, timeout=90000); pg.wait_for_selector('.scam .cthumbs b', timeout=90000)
             pg.wait_for_function(f"document.querySelector('.scam .cthumbs b')?.textContent === '{i + 1}'", timeout=60000)
 
         check(pg.inner_text('.scam .cthumbs b') == '3', '3 clips recorded')
@@ -179,16 +183,26 @@ def main():
         pg.locator('.shot-actions .sbtn.primary').click(); pg.wait_for_selector('.scam .edit', timeout=10000)
         _t = pg.inner_text('.scam .etop b'); _m = re.search(r'(\d+):(\d+(?:\.\d+)?)', _t); expect_total = (int(_m.group(1)) * 60 + float(_m.group(2))) if _m else float(re.search(r'([\d.]+)s', _t).group(1)); print('edit view total', expect_total)
         pg.get_by_role('button', name=re.compile('Use these 3 clips')).click(); pg.wait_for_selector('text=Send to your agency')
+        pre = pg.evaluate("""async () => { const r = indexedDB.open('dr-social'); const db = await new Promise(x => r.onsuccess = () => x(r.result));
+          const all = await new Promise(x => { const q = db.transaction('drafts').objectStore('drafts').getAll(); q.onsuccess = () => x(q.result) });
+          const d = all[0]; const out = []; for (const id of d.order) { const b = d.clips.find(c => c.id === id).blob; const h = await crypto.subtle.digest('SHA-256', await b.arrayBuffer()); out.push([b.size, [...new Uint8Array(h)].map(x => x.toString(16).padStart(2,'0')).join('')]) } return out }""")
         pg.get_by_role('button', name='Send', exact=True).click()
         pg.wait_for_selector('text=Sent to your agency', timeout=90000)
-        ups = [c for c in CALLS if c[0] == 'upload']; subs = [c for c in CALLS if c[0] == 'rpc' and c[1] == 'social_submit']
-        check(len(ups) == 1 and ups[0][1].startswith(f'{WA}/sub/{P1}/{C}/') and ups[0][2] > 10000, f'clean video uploaded to agency/sub/project/creator path ({ups[0][1] if ups else None}, {ups[0][2] if ups else 0} bytes)')
+        allups = [c for c in CALLS if c[0] == 'upload']; subs = [c for c in CALLS if c[0] == 'rpc' and c[1] == 'social_submit']
+        clipups = [u for u in allups if '-clip-' in u[1]]; ups = [u for u in allups if u[1].split('/')[-1].split('.')[0].endswith('-clean')]
+        check(len(ups) == 1 and ups[0][1].startswith(f'{WA}/sub/{P1}/{C}/') and ups[0][2] > 10000, f'joined video uploaded to agency/sub/project/creator path ({ups[0][1] if ups else None}, {ups[0][2] if ups else 0} bytes)')
+        import hashlib
+        got = [[len(UPLOADS[u[1]]), hashlib.sha256(UPLOADS[u[1]]).hexdigest()] for u in clipups]
+        check(len(clipups) == 3 and got == pre, f'3 original clips uploaded byte-for-byte identical to what was recorded (sha256 match: {got == pre})')
+        check(allups.index(clipups[-1]) < allups.index(ups[0]) if clipups and ups else False, 'originals uploaded before the joined copy')
+        origs = (subs[0][2].get('meta') or {}).get('originals') if subs else None
+        check(isinstance(origs, list) and len(origs) == 3 and [o['size'] for o in origs] == [x[0] for x in pre] and all(o['path'].startswith(f'{WA}/sub/{P1}/{C}/') for o in origs), 'submission lists the 3 originals with sizes and tenant-scoped paths')
         check(len(subs) == 1 and subs[0][2]['mix'] is None and subs[0][2]['clips'] == 3 and subs[0][2]['src'] == 'camera', 'social_submit called once, clean only, 3 clips')
         dur = subs[0][2]['dur'] if subs else 0
         check(abs(dur - expect_total) < 0.6, f'assembled duration = trimmed total ({dur}s vs {expect_total}s)')
         pg.wait_for_timeout(800); pg.screenshot(path='06_sent.png', full_page=True)
         check('Waiting for review' in pg.inner_text('.shot'), 'page shows sent / waiting for review')
-        out = UPLOADS[ups[0][1]]; open('/home/claude/e2e/out_clean.' + ('webm' if b'webm' in out[:64] or out[:4] == b'\x1aE\xdf\xa3' else 'mp4'), 'wb').write(out)
+        out = UPLOADS[ups[0][1]]; open('./out_clean.' + ('webm' if b'webm' in out[:64] or out[:4] == b'\x1aE\xdf\xa3' else 'mp4'), 'wb').write(out)
         import subprocess; fn = [f for f in __import__('os').listdir('.') if f.startswith('out_clean.')][0]
         real = float(subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',fn],capture_output=True,text=True).stdout.strip() or 0)
         check(abs(real - expect_total) < 1.0, f'actual joined file length matches the timeline ({real:.1f}s vs {expect_total}s)')
@@ -213,10 +227,12 @@ def main():
         pg.get_by_role('button', name='Done').click(); pg.get_by_role('button', name=re.compile('Use these 2 clips')).click()
         pg.wait_for_selector('text=one with the music'); pg.get_by_role('button', name='Send', exact=True).click()
         pg.wait_for_selector('text=Sent to your agency', timeout=90000)
-        ups = [c for c in CALLS if c[0] == 'upload']; subs = [c for c in CALLS if c[0] == 'rpc' and c[1] == 'social_submit']
+        allups = [c for c in CALLS if c[0] == 'upload']; subs = [c for c in CALLS if c[0] == 'rpc' and c[1] == 'social_submit']
+        ups = [u for u in allups if '-clip-' not in u[1]]
+        check(len([u for u in allups if '-clip-' in u[1]]) == 2, 'dance shot also keeps its 2 original clips')
         check(len(ups) == 2 and any(u[1].endswith('-mix.mp4') or '-mix.' in u[1] for u in ups), f'licensed dance uploads clean + music versions {[u[1].rsplit("/",1)[1] for u in ups]}')
         check(subs and subs[0][2]['mix'] is not None, 'submission links the music version')
-        for u in ups: open('/home/claude/e2e/out_dance_' + ('mix' if '-mix.' in u[1] else 'clean') + '.' + u[1].rsplit('.', 1)[1], 'wb').write(UPLOADS[u[1]])
+        for u in ups: open('./out_dance_' + ('mix' if '-mix.' in u[1] else 'clean') + '.' + u[1].rsplit('.', 1)[1], 'wb').write(UPLOADS[u[1]])
 
         errs = [l for l in logs if l.startswith('PAGEERROR') or l.startswith('error')]
         print('\nconsole errors:', *errs[:15], sep='\n  ')

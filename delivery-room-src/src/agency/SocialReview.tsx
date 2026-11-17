@@ -4,7 +4,7 @@ import { sb, errMsg } from '../lib/supabase'
 import { useWs } from '../lib/auth'
 import { useAsync, Loading, ErrorBox, useToast, Modal } from '../lib/ui'
 import { fmtBytes, fmtDate } from '../lib/types'
-import { fmtDur, signed, type ContentType, type Project, type Section, type Submission } from '../lib/social'
+import { fmtDur, signed, downloadOriginal, originalsOf, type ContentType, type Project, type Section, type Submission } from '../lib/social'
 
 type Row = Submission & { profiles: { full_name: string; email: string } | null }
 const ST: Record<string, [string, string]> = { submitted: ['Waiting for review', 'wait'], revision_requested: ['Redo requested', 'bad'], approved: ['Approved', 'ok'] }
@@ -75,7 +75,6 @@ export function SocialInbox() {
   </>
 }
 
-function saveFrom(url: string, name: string) { const a = document.createElement('a'); a.href = url; a.download = name; a.rel = 'noreferrer'; document.body.appendChild(a); a.click(); a.remove() }
 const clean = (s: string) => s.replace(/[^A-Za-z0-9]+/g, '').slice(0, 40) || 'Item'
 
 export function SocialReviewDetail() {
@@ -93,7 +92,7 @@ export function SocialReviewDetail() {
     const queue = ((q.data || []) as { id: string }[]).map(x => x.id)
     return { s: s as Submission, history: (h.data || []) as Submission[], creator: pr.data?.full_name || pr.data?.email || 'Creator', queue }
   }, [id])
-  useEffect(() => { if (data) signed(data.history.flatMap(h => [h.clean_path, h.mix_path])).then(setUrls) }, [data])
+  useEffect(() => { if (data) signed([...data.history.flatMap(h => [h.clean_path, h.mix_path]), ...originalsOf(data.s).map(o => o.path)]).then(setUrls) }, [data])
   if (loading || st.loading) return <Loading />
   if (error || !data) return <ErrorBox msg={error} />
   const { s, history, creator, queue } = data
@@ -103,6 +102,13 @@ export function SocialReviewDetail() {
   const latest = history[0]?.id === s.id
   const base = `${clean(creator)}_${clean(type?.name || '')}_${clean(sec?.title || '')}_${clean(p?.title || '')}_v${s.version}`
   const ext = (path: string) => path.split('.').pop() || 'mp4'
+  const origs = originalsOf(s)
+  async function dl(path: string, name: string, what: string) {
+    try { await downloadOriginal(path, name); sb.rpc('log_social_download', { sub: s.id, what }).then(() => {}) } catch (e) { toast(errMsg(e)) }
+  }
+  async function dlAll() {
+    for (let i = 0; i < origs.length; i++) { await dl(origs[i].path, `${base}_clip${i + 1}.${ext(origs[i].path)}`, `original clip ${i + 1}`); await new Promise(r => setTimeout(r, 900)) }
+  }
   async function go() {
     setBusy(true); const { error } = await sb.rpc('social_review', { sub: s.id, act, note }); setBusy(false)
     if (error) return toast(errMsg(error)); toast(act === 'approve' ? 'Approved' : 'Sent back to ' + creator); setAct(null); setNote('')
@@ -123,12 +129,20 @@ export function SocialReviewDetail() {
       <section className="card stack"><div className="between"><h3>Clean video</h3><span className="muted" style={{ fontSize: 13 }}>{p?.mode === 'dance' || p?.mode === 'both' ? 'No backing music' : 'As filmed'}</span></div>
         {urls[s.clean_path] ? <video className="rvid" src={urls[s.clean_path]} controls playsInline preload="metadata" /> : <Loading />}
         <p className="mono muted">{s.width && s.height ? `${s.width}×${s.height} · ` : ''}{fmtDur(s.duration_s)} · {fmtBytes(s.size_bytes)}{s.smoothing != null ? ` · smoothing ${s.smoothing}` : ''}{s.clip_count ? ` · ${s.clip_count} clip${s.clip_count > 1 ? 's' : ''}` : ''} · {s.source === 'upload' ? 'camera roll' : 'filmed in app'}</p>
-        <button className="btn ghost" disabled={!urls[s.clean_path]} onClick={() => saveFrom(urls[s.clean_path], `${base}_clean.${ext(s.clean_path)}`)}>Download clean</button></section>
+        <button className="btn ghost" disabled={!urls[s.clean_path]} onClick={() => dl(s.clean_path, `${base}_${origs.length ? 'joined' : 'clean'}.${ext(s.clean_path)}`, origs.length ? 'joined video' : 'clean video')}>{origs.length ? 'Download joined preview' : 'Download original'}</button></section>
       {s.mix_path ? <section className="card stack"><div className="between"><h3>With reference music</h3><span className="pill ok">Licensed</span></div>
         {urls[s.mix_path] ? <video className="rvid" src={urls[s.mix_path]} controls playsInline preload="metadata" /> : <Loading />}
-        <button className="btn ghost" disabled={!urls[s.mix_path]} onClick={() => saveFrom(urls[s.mix_path!], `${base}_music.${ext(s.mix_path!)}`)}>Download with music</button></section>
+        <button className="btn ghost" disabled={!urls[s.mix_path]} onClick={() => dl(s.mix_path!, `${base}_music.${ext(s.mix_path!)}`, 'music version')}>Download with music</button></section>
         : (p?.mode === 'dance' || p?.mode === 'both') && <section className="card stack"><h3>With reference music</h3><p className="muted">{s.mix_note || (p?.rights_status === 'licensed' ? 'Not made for this submission.' : 'Not made, because the music rights for this shot are not set to Licensed.')}</p></section>}
     </div>
+    {origs.length > 0 && <section className="card stack" id="originals"><div className="between"><div><h3>Original clips</h3>
+        <p className="muted" style={{ fontSize: 13 }}>Exactly as recorded on the phone, never re-encoded. The joined video above is made from these and is slightly compressed.</p></div>
+        <button className="btn ghost" onClick={dlAll}>Download all {origs.length}</button></div>
+      <div className="clipgrid">{origs.map((o, i) => <div key={o.path} className="clipcard">
+        {urls[o.path] ? <video className="rvid" src={urls[o.path]} controls playsInline preload="metadata" /> : <Loading />}
+        <div className="between"><b>Clip {i + 1}</b><span className="mono muted">{fmtDur(o.duration)} · {fmtBytes(o.size)}</span></div>
+        {(o.trim_in > 0.05 || o.duration - o.trim_out > 0.05) && <p className="muted" style={{ fontSize: 12.5 }}>Trimmed in the joined video to {fmtDur(o.trim_in)}–{fmtDur(o.trim_out)}</p>}
+        <button className="btn ghost" onClick={() => dl(o.path, `${base}_clip${i + 1}.${ext(o.path)}`, `original clip ${i + 1}`)}>Download clip {i + 1}</button></div>)}</div></section>}
     <section className="stack"><h2 style={{ fontSize: 18 }}>All versions</h2><div className="list">{history.map(h => <Link key={h.id} to={'/agency/social-review/' + h.id} className="card tight click between" aria-current={h.id === s.id}>
       <span><b>v{h.version}</b> <span className="mono muted">{fmtDate(h.created_at)}</span>{h.review_note && <span className="muted"> · {h.review_note}</span>}</span><span className={'pill ' + ST[h.status][1]}>{ST[h.status][0]}</span></Link>)}</div>
       <p className="muted" style={{ fontSize: 13 }}>New attempts are added as new versions. Nothing older is overwritten.</p></section>

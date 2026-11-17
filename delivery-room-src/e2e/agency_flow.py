@@ -7,7 +7,7 @@ cf.DB['profiles'] = [dict(id=STAFF, full_name='Agency Owner', email='o@x.test', 
 cf.DB['workspace_members'] = [dict(user_id=STAFF, workspace_id=WA, role='owner', workspaces=dict(id=WA, name='Agency A', status='active'))]
 cf.DB['creator_memberships'] = [dict(creator_id=C, workspace_id=WA, status='active', joined_at='2026-11-01', profiles=dict(full_name='Desi Destiny', email='c@x.test'))]
 cf.DB['social_projects'][1].update(import_status='awaiting_upload', import_error="Instagram doesn't allow automatic downloads.", publication_status='draft')
-cf.DB['social_submissions'] = [dict(id='eeeeeee1-0000-4000-8000-000000000001', assignment_id=A3, workspace_id=WA, project_id=P3, creator_id=C, version=1, clean_path=f'{WA}/sub/{P3}/{C}/x-clean.mp4', mix_path=f'{WA}/sub/{P3}/{C}/x-mix.mp4', mix_note=None, mime='video/mp4', size_bytes=900000, duration_s=12.3, width=1080, height=1920, smoothing=40, clip_count=2, source='camera', meta={}, status='submitted', review_note=None, reviewed_at=None, created_at='2026-11-13T11:00:00Z', profiles=dict(full_name='Desi Destiny', email='c@x.test'))]
+cf.DB['social_submissions'] = [dict(id='eeeeeee1-0000-4000-8000-000000000001', assignment_id=A3, workspace_id=WA, project_id=P3, creator_id=C, version=1, clean_path=f'{WA}/sub/{P3}/{C}/x-clean.mp4', mix_path=f'{WA}/sub/{P3}/{C}/x-mix.mp4', mix_note=None, mime='video/mp4', size_bytes=900000, duration_s=12.3, width=1080, height=1920, smoothing=40, clip_count=2, source='camera', meta={'originals': [dict(path=f'{WA}/sub/{P3}/{C}/x-clip-1.mp4', size=400000, duration=6.2, trim_in=0, trim_out=6.2, width=1080, height=1920, smoothing=40), dict(path=f'{WA}/sub/{P3}/{C}/x-clip-2.mp4', size=500000, duration=6.4, trim_in=0.3, trim_out=6.4, width=1080, height=1920, smoothing=40)]}, status='submitted', review_note=None, reviewed_at=None, created_at='2026-11-13T11:00:00Z', profiles=dict(full_name='Desi Destiny', email='c@x.test'))]
 cf.DB['social_assignments'][2]['status'] = 'submitted'
 fails = []
 def check(c, m): print(('PASS ' if c else 'FAIL ') + m); (None if c else fails.append(m))
@@ -34,7 +34,15 @@ with sync_playwright() as pw:
     pg.select_option('select[aria-label="Status"]', 'approved'); check(pg.locator('table').count() == 0, 'status filter works')
     pg.select_option('select[aria-label="Status"]', 'submitted')
     pg.locator('table a').first.click(); pg.wait_for_selector('text=Clean video', timeout=10000); pg.wait_for_timeout(500)
-    check(pg.locator('text=With reference music').count() == 1 and pg.locator('video').count() == 2, 'detail shows clean + music players'); pg.screenshot(path='a4_review.png', full_page=True)
+    check(pg.locator('text=With reference music').count() == 1 and pg.locator('.vgrid video').count() == 2, 'detail shows joined + music players'); pg.screenshot(path='a4_review.png', full_page=True)
+    check(pg.locator('#originals .clipcard').count() == 2 and pg.locator('#originals video').count() == 2, 'original clips section lists both untouched clips with players')
+    check('Trimmed in the joined video' in pg.inner_text('#originals .clipcard >> nth=1'), 'clip 2 shows it was trimmed in the joined version (original kept whole)')
+    with pg.expect_download(timeout=15000) as dl: pg.locator('#originals').get_by_role('button', name='Download clip 1').click()
+    d = dl.value; pg.wait_for_timeout(600)
+    signs = [c for c in cf.CALLS if c[0] == 'sign1']
+    check(d.suggested_filename.endswith('_clip1.mp4') and signs and signs[-1][1].endswith('x-clip-1.mp4') and signs[-1][2].get('expiresIn') == 600, f'clip 1 downloads as the stored original via a 10-min signed link ({d.suggested_filename})')
+    lg = [c for c in cf.CALLS if c[0] == 'rpc' and c[1] == 'log_social_download']
+    check(lg and lg[-1][2] == {'sub': 'eeeeeee1-0000-4000-8000-000000000001', 'what': 'original clip 1'}, 'download is written to the audit log')
     pg.get_by_role('button', name='Request redo').click(); pg.fill('#rv-note', 'Smile more in the hook'); pg.get_by_role('button', name='Send back for redo').click(); pg.wait_for_timeout(800)
     rv = [c for c in cf.CALLS if c[0] == 'rpc' and c[1] == 'social_review']
     check(rv and rv[0][2] == {'sub': 'eeeeeee1-0000-4000-8000-000000000001', 'act': 'revise', 'note': 'Smile more in the hook'}, 'redo request sent with note')

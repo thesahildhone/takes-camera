@@ -17,8 +17,12 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
   const auth = req.headers.get('authorization') || ''
   const user = createClient(URL_, ANON, { global: { headers: { authorization: auth } }, auth: { persistSession: false } })
-  const { data: u } = await user.auth.getUser()
-  if (!u?.user) return json({ error: 'Sign in again, then retry.' }, 401)
+  // The gateway (verify_jwt) has already checked this token's signature and expiry; Postgres checks it again on every query.
+  const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+  let claims: { sub?: string; role?: string; exp?: number } = {}
+  try { const b64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); claims = JSON.parse(atob(b64 + '='.repeat((4 - b64.length % 4) % 4))) } catch { /* invalid */ }
+  if (!claims.sub || claims.role !== 'authenticated' || (claims.exp || 0) * 1000 < Date.now()) return json({ error: 'Sign in again, then retry.' }, 401)
+  const u = { user: { id: claims.sub } }
   let body: { confirm?: string } = {}
   try { body = await req.json() } catch { /* empty */ }
   if ((body.confirm || '').trim() !== 'DELETE') return json({ error: 'Type DELETE to confirm' }, 400)

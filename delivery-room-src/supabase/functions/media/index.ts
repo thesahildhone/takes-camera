@@ -33,8 +33,12 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
   if (!ACCT) return json({ error: 'Storage is not configured' }, 500)
   const user = createClient(URL_, ANON, { global: { headers: { authorization: req.headers.get('authorization') || '' } }, auth: { persistSession: false } })
-  const { data: u } = await user.auth.getUser()
-  if (!u?.user) return json({ error: 'Sign in again, then retry.' }, 401)
+  // The gateway (verify_jwt) has already checked this token's signature and expiry; Postgres checks it again on every query.
+  const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+  let claims: { sub?: string; role?: string; exp?: number } = {}
+  try { const b64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); claims = JSON.parse(atob(b64 + '='.repeat((4 - b64.length % 4) % 4))) } catch { /* invalid */ }
+  if (!claims.sub || claims.role !== 'authenticated' || (claims.exp || 0) * 1000 < Date.now()) return json({ error: 'Sign in again, then retry.' }, 401)
+  const u = { user: { id: claims.sub } }
   let b: Record<string, unknown> = {}
   try { b = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
   const action = b.action, bucket = b.bucket, path = typeof b.path === 'string' ? b.path : ''

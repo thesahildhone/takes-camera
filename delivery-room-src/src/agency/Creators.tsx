@@ -74,7 +74,7 @@ export default function Creators() {
         <button className="btn primary block" onClick={async () => toast(await copyText(newLink) ? 'Link copied' : 'Select the link and copy it')}>Copy link</button>
         <button className="btn ghost block" onClick={() => setNewLink(null)}>Create another</button>
       </div> : <div className="stack">
-        <label className="field"><span>Email (optional, just so you remember who it's for)</span><input id="invemail" className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
+        <label className="field"><span>Email (optional). If you add one, we email them the invite too</span><input id="invemail" className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
         {creating === 'staff' && <label className="field"><span>Role</span><select id="invrole" className="select" value={role} onChange={e => setRole(e.target.value)}><option value="reviewer">Reviewer: builds templates, assigns, reviews</option><option value="admin">Admin: also manages creators, team and settings</option></select></label>}
         <ErrorBox msg={err} />
         <button className="btn primary block" onClick={createInvite}>Create invite link</button>

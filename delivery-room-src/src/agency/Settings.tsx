@@ -5,6 +5,7 @@ import { useAsync, Loading, ErrorBox, useToast } from '../lib/ui'
 import { fmtBytes, fmtDate } from '../lib/types'
 import PasswordCard from '../components/PasswordCard'
 import { TwoStepCard } from '../components/TwoStep'
+import EmailPrefCard from '../components/EmailPrefCard'
 
 export default function Settings() {
   const { ws, isAdmin } = useWs(); const { refresh } = useAuth(); const toast = useToast()
@@ -30,6 +31,7 @@ export default function Settings() {
     <section className="card stack"><h3>Workspace</h3>
       <div className="row wrap"><input id="wsn" className="input" style={{ maxWidth: 320 }} value={name} disabled={!isAdmin} onChange={e => setName(e.target.value)} /><button className="btn ghost" disabled={!isAdmin || !name.trim() || name === ws?.name} onClick={rename}>Rename</button></div>
     </section>
+    <EmailPrefCard section />
     <TwoStepCard />
     {isAdmin && <section className="card stack"><h3>Team security</h3>
       <label className="row" style={{ gap: 10 }}><input type="checkbox" checked={data.requireMfa} onChange={e => setReq(e.target.checked)} />

@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { useToast, Modal } from '../lib/ui'
 import { CTop } from './CreatorApp'
 import PasswordCard from '../components/PasswordCard'
+import EmailPrefCard from '../components/EmailPrefCard'
 
 export default function Account() {
   const { profile, creatorOf, refresh, signOut } = useAuth(); const toast = useToast()
@@ -28,6 +29,7 @@ export default function Account() {
         {creatorOf.length === 0 ? <p className="muted">None yet. Open an invite link from your agency to join.</p> :
           creatorOf.map(w => <div key={w.id} className="between"><b>{w.name}</b><button className="btn sm ghost" onClick={() => setLeave({ id: w.id, name: w.name })}>Leave</button></div>)}
         <p className="muted" style={{ fontSize: 13 }}>Each agency only sees its own assignments and your work for them, never your other agencies.</p></div>
+      <EmailPrefCard />
       <PasswordCard />
       <button className="btn ghost" onClick={signOut}>Sign out</button>
       <button className="link" style={{ justifySelf: 'center', color: 'var(--bad)', fontSize: 14 }} onClick={() => { setDel(true); setConfirm(''); setDelErr(null) }}>Delete my account</button>

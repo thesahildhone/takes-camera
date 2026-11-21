@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { Session } from '@supabase/supabase-js'
 import { sb } from './supabase'
 
-export interface Profile { id: string; full_name: string; email: string | null; kind: 'business' | 'creator'; smoothing: number }
+export interface Profile { id: string; full_name: string; email: string | null; kind: 'business' | 'creator'; smoothing: number; email_notifications?: boolean }
 export interface StaffWs { id: string; name: string; role: 'owner' | 'admin' | 'reviewer'; status: string; title?: string | null }
 export interface CreatorWs { id: string; name: string; status: string }
 interface Ctx {

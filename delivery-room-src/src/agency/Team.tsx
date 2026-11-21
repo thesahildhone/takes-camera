@@ -102,7 +102,7 @@ export default function Team() {
         <div className="field"><span>Their job</span><TitlePicker value={title} onChange={setTitle} /></div>
         <label className="field"><span>What they can do</span><select className="select" value={role} onChange={e => setRole(e.target.value)}>
           <option value="reviewer">Content only: shots, sets and reviews</option><option value="admin">Full access: also team, creators and settings</option></select></label>
-        <label className="field"><span>Email (optional, so you remember who it's for)</span><input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
+        <label className="field"><span>Email (optional). If you add one, we email them the invite too</span><input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
         <ErrorBox msg={err} />
         <button className="btn primary block" onClick={invite}>Create invite link</button>
       </div>}

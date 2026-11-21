@@ -13,6 +13,9 @@ async function takeEmailLink() {
   if (p.get('error_description')) { history.replaceState(null, '', location.pathname + '#/auth?linkerr=' + encodeURIComponent(p.get('error_description')!)); return }
   const access_token = p.get('access_token'), refresh_token = p.get('refresh_token')
   if (access_token && refresh_token) await sb.auth.setSession({ access_token, refresh_token }).catch(() => {})
-  history.replaceState(null, '', location.pathname + (p.get('type') === 'recovery' ? '#/reset' : '#/'))
+  // after confirming a new account, return to where they signed up from (e.g. an invite link)
+  let after = '/'
+  try { const n = localStorage.getItem('sr.afterConfirm'); if (n && n.startsWith('/')) after = n; localStorage.removeItem('sr.afterConfirm') } catch { /* storage blocked */ }
+  history.replaceState(null, '', location.pathname + (p.get('type') === 'recovery' ? '#/reset' : '#' + after))
 }
 takeEmailLink().finally(() => createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>))

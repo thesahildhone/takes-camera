@@ -23,6 +23,7 @@ export function AuthPage() {
   const [q] = useSearchParams(); const nav = useNavigate(); const { session, refresh } = useAuth()
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(q.get('mode') === 'signup' ? 'signup' : 'signin')
   const [sent, setSent] = useState(false)
+  const [confirmTo, setConfirmTo] = useState<string | null>(null)
   const [kind, setKind] = useState<'business' | 'creator'>(q.get('kind') === 'business' ? 'business' : 'creator')
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [pw, setPw] = useState('')
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(q.get('linkerr') ? 'That email link has expired or was already used. Ask for a new one.' : null)
@@ -39,12 +40,13 @@ export function AuthPage() {
       }
       if (mode === 'signup') {
         if (!name.trim()) throw new Error('Add your name')
-        const { data: su, error } = await sb.auth.signUp({ email: email.trim(), password: pw, options: { data: { full_name: name.trim(), kind } } })
+        try { localStorage.setItem('sr.afterConfirm', next) } catch { /* storage blocked */ }
+        const { data: su, error } = await sb.auth.signUp({ email: email.trim(), password: pw, options: { data: { full_name: name.trim(), kind }, emailRedirectTo: location.origin + location.pathname } })
         if (error) throw error
         // an email that already has an account comes back with no identities and no error
         if (su.user && !su.user.identities?.length) throw new Error('An account with this email already exists. Sign in instead, or use a different email.')
-        const { error: e2 } = await sb.auth.signInWithPassword({ email: email.trim(), password: pw })
-        if (e2) throw e2
+        if (!su.session) { setConfirmTo(email.trim()); return }   // email confirmation is on: wait for the link
+
       } else {
         const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password: pw })
         if (error) throw error
@@ -52,6 +54,21 @@ export function AuthPage() {
       await refresh()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
   }
+  async function resend() {
+    if (!confirmTo) return
+    const { error } = await sb.auth.resend({ type: 'signup', email: confirmTo, options: { emailRedirectTo: location.origin + location.pathname } })
+    setErr(error ? (/rate|seconds/i.test(error.message) ? 'Wait a minute before asking for another email.' : errMsg(error)) : null)
+    if (!error) setSent(true)
+  }
+  if (confirmTo) return <div className="public"><div className="box">
+    <Brand />
+    <h1>Check your email</h1>
+    <p className="muted">We sent a link to <b>{confirmTo}</b>. Open it on this device to finish setting up your account. It can take a minute, and may land in spam.</p>
+    {err && <div className="err" role="alert">{err}</div>}
+    {sent && !err && <p className="muted">Sent again.</p>}
+    <button className="btn ghost block" type="button" onClick={resend}>Send the email again</button>
+    <button className="btn ghost block" type="button" onClick={() => { setConfirmTo(null); setSent(false); setMode('signin') }}>Back to sign in</button>
+  </div></div>
   return <div className="public"><form className="box" onSubmit={submit}>
     <Brand />
     <h1>{mode === 'forgot' ? 'Reset your password' : mode === 'signup' ? (kind === 'business' ? 'Set up your agency' : 'Create your creator account') : 'Sign in'}</h1>

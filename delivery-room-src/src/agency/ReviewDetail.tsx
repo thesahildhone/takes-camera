@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { signedUrls } from '../lib/storage'
 import { Link, useParams } from 'react-router-dom'
 import JSZip from 'jszip'
 import { sb, errMsg } from '../lib/supabase'
@@ -27,9 +28,7 @@ export default function ReviewDetail() {
     if (!data) return
     const cur = data.files.filter(f => f.is_current)
     if (!cur.length) return
-    sb.storage.from('media').createSignedUrls(cur.map(f => f.storage_path), 1800).then(({ data: s }) => {
-      const m: Record<string, string> = {}; (s || []).forEach(x => { if (x.signedUrl && x.path) m[x.path] = x.signedUrl }); setUrls(m)
-    })
+    signedUrls('media', cur.map(f => f.storage_path)).then(setUrls)
   }, [data])
   if (loading) return <Loading />
   if (error || !data) return <ErrorBox msg={error} />

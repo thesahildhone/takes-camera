@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { sb, errMsg } from '../lib/supabase'
+import { signedUrls } from '../lib/storage'
 import { useAuth } from '../lib/auth'
 import { Loading, ErrorBox, useToast, Modal, StatusPill } from '../lib/ui'
 import { dueLabel, fmtDate, slotsFor, type Assignment, type Page, type RevisionReq, type SFile, type Slot } from '../lib/types'
@@ -31,7 +32,7 @@ export default function Runner() {
       sb.from('revision_requests').select('*').eq('assignment_id', id!).order('created_at', { ascending: false }),
     ])
     const fl = (f.data || []) as SFile[]; setFiles(fl); setRr((r.data || []) as RevisionReq[])
-    if (fl.length) { const { data } = await sb.storage.from('media').createSignedUrls(fl.map(x => x.storage_path), 1800); const m: Record<string, string> = {}; (data || []).forEach(x => { if (x.path && x.signedUrl) m[x.path] = x.signedUrl }); setUrls(m) }
+    if (fl.length) setUrls(await signedUrls('media', fl.map(x => x.storage_path)))
   }, [id])
 
   const startUpload = useCallback(async (rec: PendingRec) => {

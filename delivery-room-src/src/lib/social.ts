@@ -1,4 +1,4 @@
-import { sb } from './supabase'
+import { signedUrls } from './storage'
 
 export type Mode = 'talking' | 'dance' | 'both' | 'reference'
 export type ImportStatus = 'none' | 'importing' | 'failed' | 'awaiting_upload' | 'uploading' | 'processing' | 'ready' | 'link_only'
@@ -67,22 +67,17 @@ export function parseRef(url: string | null): Ref | null {
 }
 
 /** Fetch a short-lived link that downloads the exact stored file (no re-encoding) under a readable name. */
-export async function downloadOriginal(path: string, name: string, bucket = 'social') {
-  const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 600, { download: name })
-  if (error || !data?.signedUrl) throw error || new Error('Could not create the download link')
-  const a = document.createElement('a'); a.href = data.signedUrl; a.rel = 'noreferrer'; document.body.appendChild(a); a.click(); a.remove()
+export async function downloadOriginal(path: string, name: string, bucket: 'media' | 'social' = 'social') {
+  const url = (await signedUrls(bucket, [path], { ttl: 600, names: { [path]: name } }))[path]
+  if (!url) throw new Error('Could not create the download link')
+  const a = document.createElement('a'); a.href = url; a.rel = 'noreferrer'; document.body.appendChild(a); a.click(); a.remove()
 }
 
 export interface OriginalClip { path: string; size: number; duration: number; trim_in: number; trim_out: number; width: number; height: number; smoothing: number }
 export const originalsOf = (s: { meta: Record<string, unknown> }): OriginalClip[] => Array.isArray(s.meta?.originals) ? (s.meta.originals as OriginalClip[]).filter(o => o && typeof o.path === 'string') : []
 
-export async function signed(paths: (string | null | undefined)[], bucket = 'social'): Promise<Record<string, string>> {
-  const list = [...new Set(paths.filter(Boolean) as string[])]
-  if (!list.length) return {}
-  const { data } = await sb.storage.from(bucket).createSignedUrls(list, 1800)
-  const m: Record<string, string> = {}
-  ;(data || []).forEach(x => { if (x.path && x.signedUrl) m[x.path] = x.signedUrl })
-  return m
+export async function signed(paths: (string | null | undefined)[], bucket: 'media' | 'social' = 'social'): Promise<Record<string, string>> {
+  return signedUrls(bucket, paths)
 }
 
 export const fmtDur = (s: number | null | undefined) => {

@@ -1,6 +1,7 @@
 import * as tus from 'tus-js-client'
 import { sb, SUPABASE_URL, SUPABASE_KEY } from './supabase'
 import { uid, extOf } from './types'
+import { uploadToR2 } from './storage'
 
 export interface Meta { smoothing: number | null; width?: number | null; height?: number | null; duration?: number | null; name?: string | null }
 export interface PendingRec { key: string; assignmentId: string; workspaceId: string; pageId: string; slot: string; kind: 'photo' | 'video'; blob: Blob; meta: Meta; createdAt: number }
@@ -9,6 +10,9 @@ const CHUNK = 6 * 1024 * 1024
 
 export async function uploadObject(path: string, blob: Blob, onPct: (n: number) => void, bucket = 'media') {
   const type = blob.type || 'application/octet-stream'
+  // Creator uploads go to Cloudflare R2 when the agency's workspace is switched over; everything else as before.
+  const creatorUpload = bucket === 'media' || (bucket === 'social' && path.split('/')[1] === 'sub')
+  if (creatorUpload && await uploadToR2(bucket as 'media' | 'social', path, blob, onPct)) return
   if (blob.size <= CHUNK) {
     onPct(10)
     const { error } = await sb.storage.from(bucket).upload(path, blob, { contentType: type, upsert: false })

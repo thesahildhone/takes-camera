@@ -558,3 +558,7 @@ a{color:var(--accent)}
 .bar.meter.bad i{background:var(--bad)}
 .perf-stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .bad-t{color:var(--bad)}
+
+/* SubmitReel mark: three takes stepping up into a sent dot */
+.mark,.side .mark{width:24px;height:24px;border-radius:0;background:url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNjQgNjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3QgeD0iNSIgeT0iNDAiIHdpZHRoPSIzMSIgaGVpZ2h0PSIxNCIgcng9IjciIGZpbGw9IiNFOUM5QTEiIG9wYWNpdHk9Ii41NSIvPjxyZWN0IHg9IjE0IiB5PSIyNSIgd2lkdGg9IjMyIiBoZWlnaHQ9IjE0IiByeD0iNyIgZmlsbD0iI0U5QzlBMSIgb3BhY2l0eT0iLjgiLz48cmVjdCB4PSIyMyIgeT0iMTAiIHdpZHRoPSIyNSIgaGVpZ2h0PSIxNCIgcng9IjciIGZpbGw9IiNFOUM5QTEiLz48Y2lyY2xlIGN4PSI1NC41IiBjeT0iMTYuNSIgcj0iNi41IiBmaWxsPSIjQjk4Q0ZGIi8+PC9zdmc+Cg==") center/contain no-repeat !important}
+.mark::after,.side .mark::after{display:none !important}

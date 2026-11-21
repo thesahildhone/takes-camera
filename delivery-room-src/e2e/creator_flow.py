@@ -84,6 +84,9 @@ def handle(route):
             for a in DB['social_assignments']:
                 if a['id'] == args['asg']: a['status'] = 'submitted'
             return j(args['sub_id'])
+        if fn == 'creator_ops_metrics':
+            return j([dict(creator_id=C, name='Desi Destiny', tasks=12, submitted=10, approved=7, on_time=8, with_due=10, avg_turnaround_h=20.5, avg_review_h=5.2, reviews=9, revisions=2, overdue_now=1, open_now=2, last_sent='2026-11-20T10:00:00Z'),
+                      dict(creator_id='c2', name='New Creator', tasks=2, submitted=1, approved=0, on_time=1, with_due=1, avg_turnaround_h=0.5, avg_review_h=None, reviews=0, revisions=0, overdue_now=0, open_now=1, last_sent=None)])
         if fn == 'workspace_plan_usage':
             return j(dict(plan='growth', plan_name='Growth', price_usd=79, price_aud=119, period_start='2026-11-01T00:00:00Z', active_creators=17, creator_limit=20, staff=3, staff_limit=5, storage_bytes=1.08e12, storage_limit_gb=1000, extra_storage_gb=0))
         return j(None)

@@ -17,6 +17,7 @@ import { SocialInbox, SocialReviewDetail } from './SocialReview'
 import AgencyInbox from './AgencyInbox'
 import Calendar from './Calendar'
 import Team from './Team'
+import Performance from './Performance'
 import { usePresence, useOnline } from '../lib/presence'
 
 interface TreeType { id: string; name: string }
@@ -112,6 +113,7 @@ export default function AgencyApp() {
 
         <p className="nav-h">Workspace</p>
         <NavLink to="/agency/creators">Creators</NavLink>
+        <NavLink to="/agency/performance">Performance</NavLink>
         <NavLink to="/agency/team">Team{othersOnline > 0 && <span className="online-n" title={`${othersOnline} online now`}><i />{othersOnline}</span>}</NavLink>
         <NavLink to="/agency/settings">Settings</NavLink>
       </nav>
@@ -130,6 +132,7 @@ export default function AgencyApp() {
         <Route path="templates/:id" element={<TemplateEditor />} />
         <Route path="schedules" element={<Schedules />} />
         <Route path="creators" element={<Creators />} />
+        <Route path="performance" element={<Performance />} />
         <Route path="socials" element={<Socials />} />
         <Route path="socials/t/:typeId" element={<Socials />} />
         <Route path="socials/s/:sectionId" element={<Socials />} />

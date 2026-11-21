@@ -556,3 +556,5 @@ a{color:var(--accent)}
 .bar.meter.ok i{background:var(--ok)}
 .bar.meter.wait i{background:var(--warn)}
 .bar.meter.bad i{background:var(--bad)}
+.perf-stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.bad-t{color:var(--bad)}

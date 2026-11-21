@@ -56,6 +56,12 @@ with sync_playwright() as pw:
     logs_b = [c for c in cf.CALLS if c[0] == 'rpc' and c[1] == 'log_social_download'][n0:]
     check(sorted(x.rsplit('_', 1)[1] for x in got) == ['clip1.mp4', 'clip2.mp4', 'music.mp4'], f'all 3 files downloaded with readable names {got}')
     check(len(logs_b) == 3 and all('(bulk)' in c[2]['what'] for c in logs_b), 'each bulk download is logged')
+    pg.goto(BASE + '#/agency/performance'); pg.wait_for_selector('text=Creator performance', timeout=15000); pg.wait_for_selector('table', timeout=8000)
+    rws = pg.locator('tbody tr'); r1 = rws.nth(0).inner_text(); r2 = rws.nth(1).inner_text()
+    check('10/12' in r1 and '80%' in r1 and '22%' in r1 and '21 h' in r1, f'per-creator sent, on-time, redo rate and time to send from real counts')
+    check(r2.count('—') >= 2 and '%' not in r2, 'percentages hidden when a creator has fewer than 3 items (no misleading 100%)')
+    st = pg.inner_text('.perf-stats'); check('11/14' in st and 'On time' in st and 'Overdue now' in st, 'team totals add up across creators')
+    pg.screenshot(path='a7_perf.png', full_page=True)
     pg.goto(BASE + '#/agency/settings'); pg.wait_for_selector('#plan', timeout=15000)
     t = pg.inner_text('#plan')
     check('Plan: Growth' in t and '$79 USD / A$119' in t and '17 of 20' in t and '3 of 5' in t, 'settings shows plan, prices and usage against limits')

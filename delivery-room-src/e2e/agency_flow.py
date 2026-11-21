@@ -67,6 +67,16 @@ with sync_playwright() as pw:
     check('Plan: Growth' in t and '$79 USD / A$119' in t and '17 of 20' in t and '3 of 5' in t, 'settings shows plan, prices and usage against limits')
     check('Over your plan' in t and 'Nothing is blocked' in t and 'Getting close' in t, 'storage over limit warns without blocking; creators at 85% shows a near-limit note')
     pg.locator('#plan').screenshot(path='a6_plan.png')
+    cf.DB['workspaces'] = [dict(id=cf.WA, name='Agency A', skip_incomplete_default=False, require_mfa=False, reminder_settings=dict(due_soon_hours=24, overdue=True, overdue_repeat_hours=24, escalate_after_hours=24))]
+    pg.reload(); pg.wait_for_selector('#rm-due', timeout=15000)
+    check(pg.locator('#rm-due').input_value() == '24' and pg.locator('#rm-overdue').is_checked() and pg.locator('#rm-escalate').input_value() == '24', 'reminders card shows saved settings')
+    save = pg.locator('text=Save reminders'); check(save.is_disabled(), 'save disabled until something changes')
+    pg.select_option('#rm-due', '6'); pg.locator('#rm-overdue').uncheck()
+    check(pg.locator('#rm-repeat').count() == 0, 'repeat option hidden when missed-deadline reminders are off')
+    pg.select_option('#rm-escalate', '48'); n0 = len(cf.CALLS); save.click(); pg.wait_for_timeout(600)
+    sent = [c for c in cf.CALLS[n0:] if c[0] == 'rpc' and c[1] == 'set_reminder_settings']
+    check(len(sent) == 1 and sent[0][2]['s'] == dict(due_soon_hours=6, overdue=False, overdue_repeat_hours=24, escalate_after_hours=48) and sent[0][2]['ws'] == cf.WA, f'saving sends the new settings to the server {sent[-1:] }')
+    pg.locator('#rm-due').scroll_into_view_if_needed(); pg.locator('#rm-due').locator('xpath=ancestor::section').screenshot(path='a8_reminders.png')
     check(not errs, 'no page errors ' + '; '.join(errs[:3]))
     b.close()
 print(len(fails), 'failure(s)')

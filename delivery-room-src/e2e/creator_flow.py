@@ -84,6 +84,8 @@ def handle(route):
             for a in DB['social_assignments']:
                 if a['id'] == args['asg']: a['status'] = 'submitted'
             return j(args['sub_id'])
+        if fn == 'workspace_plan_usage':
+            return j(dict(plan='growth', plan_name='Growth', price_usd=79, price_aud=119, period_start='2026-11-01T00:00:00Z', active_creators=17, creator_limit=20, staff=3, staff_limit=5, storage_bytes=1.08e12, storage_limit_gb=1000, extra_storage_gb=0))
         return j(None)
     if path.startswith('/rest/v1/'):
         t = path.split('/rest/v1/', 1)[1]

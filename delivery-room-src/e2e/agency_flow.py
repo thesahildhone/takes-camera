@@ -56,6 +56,11 @@ with sync_playwright() as pw:
     logs_b = [c for c in cf.CALLS if c[0] == 'rpc' and c[1] == 'log_social_download'][n0:]
     check(sorted(x.rsplit('_', 1)[1] for x in got) == ['clip1.mp4', 'clip2.mp4', 'music.mp4'], f'all 3 files downloaded with readable names {got}')
     check(len(logs_b) == 3 and all('(bulk)' in c[2]['what'] for c in logs_b), 'each bulk download is logged')
+    pg.goto(BASE + '#/agency/settings'); pg.wait_for_selector('#plan', timeout=15000)
+    t = pg.inner_text('#plan')
+    check('Plan: Growth' in t and '$79 USD / A$119' in t and '17 of 20' in t and '3 of 5' in t, 'settings shows plan, prices and usage against limits')
+    check('Over your plan' in t and 'Nothing is blocked' in t and 'Getting close' in t, 'storage over limit warns without blocking; creators at 85% shows a near-limit note')
+    pg.locator('#plan').screenshot(path='a6_plan.png')
     check(not errs, 'no page errors ' + '; '.join(errs[:3]))
     b.close()
 print(len(fails), 'failure(s)')

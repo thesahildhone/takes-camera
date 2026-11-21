@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 export const SUPABASE_URL = 'https://qchxfwoaaoslipwkdqep.supabase.co'
 export const SUPABASE_KEY = 'sb_publishable_U7Ivi0etHC-PPVYvQgfATA_P10c7vlK'
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } })
-export const APP_NAME = 'Delivery Room'
+export const APP_NAME = 'SubmitReel'
 
 export function errMsg(e: unknown): string {
   if (!e) return 'Something went wrong'

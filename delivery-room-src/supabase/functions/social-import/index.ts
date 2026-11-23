@@ -126,8 +126,10 @@ Deno.serve(async req => {
   let body: { action?: string; project_id?: string }
   try { body = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
   if (body.action === 'caps') {
-    const { data: u } = await user.auth.getUser()
-    if (!u?.user) return json({ error: 'Sign in first' }, 401)
+    // The gateway (verify_jwt) has already checked the token's signature and expiry.
+    let claims: { sub?: string; role?: string } = {}
+    try { const b64 = auth.replace(/^Bearer\s+/i, '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); claims = JSON.parse(atob(b64 + '='.repeat((4 - b64.length % 4) % 4))) } catch { /* invalid */ }
+    if (!claims.sub || claims.role !== 'authenticated') return json({ error: 'Sign in first' }, 401)
     return json({ ok: true, link_import: !!APIFY, transcripts: !!OPENAI })
   }
 

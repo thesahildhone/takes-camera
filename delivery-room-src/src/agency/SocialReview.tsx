@@ -157,11 +157,11 @@ export function SocialReviewDetail() {
     {s.review_note && <div className="notice"><b>{s.status === 'approved' ? 'Approval note' : 'Redo note'}:</b> {s.review_note}</div>}
     <div className="vgrid">
       <section className="card stack"><div className="between"><h3>Clean video</h3><span className="muted" style={{ fontSize: 13 }}>{p?.mode === 'dance' || p?.mode === 'both' ? 'No backing music' : 'As filmed'}</span></div>
-        {urls[s.clean_path] ? <video className="rvid" src={urls[s.clean_path]} controls playsInline preload="metadata" /> : <Loading />}
+        {urls[s.clean_path] ? <video className="rvid" src={urls[s.clean_path]} controls controlsList="nodownload" playsInline preload="metadata" /> : <Loading />}
         <p className="mono muted">{s.width && s.height ? `${s.width}×${s.height} · ` : ''}{fmtDur(s.duration_s)} · {fmtBytes(s.size_bytes)}{s.smoothing != null ? ` · smoothing ${s.smoothing}` : ''}{s.clip_count ? ` · ${s.clip_count} clip${s.clip_count > 1 ? 's' : ''}` : ''} · {s.source === 'upload' ? 'camera roll' : 'filmed in app'}</p>
         <button className="btn ghost" disabled={!urls[s.clean_path]} onClick={() => dl(s.clean_path, `${base}_${origs.length ? 'joined' : 'clean'}.${ext(s.clean_path)}`, origs.length ? 'joined video' : 'clean video')}>{origs.length ? 'Download joined preview' : 'Download original'}</button></section>
       {s.mix_path ? <section className="card stack"><div className="between"><h3>With reference music</h3><span className="pill ok">Licensed</span></div>
-        {urls[s.mix_path] ? <video className="rvid" src={urls[s.mix_path]} controls playsInline preload="metadata" /> : <Loading />}
+        {urls[s.mix_path] ? <video className="rvid" src={urls[s.mix_path]} controls controlsList="nodownload" playsInline preload="metadata" /> : <Loading />}
         <button className="btn ghost" disabled={!urls[s.mix_path]} onClick={() => dl(s.mix_path!, `${base}_music.${ext(s.mix_path!)}`, 'music version')}>Download with music</button></section>
         : (p?.mode === 'dance' || p?.mode === 'both') && <section className="card stack"><h3>With reference music</h3><p className="muted">{s.mix_note || (p?.rights_status === 'licensed' ? 'Not made for this submission.' : 'Not made, because the music rights for this shot are not set to Licensed.')}</p></section>}
     </div>
@@ -169,7 +169,7 @@ export function SocialReviewDetail() {
         <p className="muted" style={{ fontSize: 13 }}>Exactly as recorded on the phone, never re-encoded. The joined video above is made from these and is slightly compressed.</p></div>
         <button className="btn ghost" onClick={dlAll}>Download all {origs.length}</button></div>
       <div className="clipgrid">{origs.map((o, i) => <div key={o.path} className="clipcard">
-        {urls[o.path] ? <video className="rvid" src={urls[o.path]} controls playsInline preload="metadata" /> : <Loading />}
+        {urls[o.path] ? <video className="rvid" src={urls[o.path]} controls controlsList="nodownload" playsInline preload="metadata" /> : <Loading />}
         <div className="between"><b>Clip {i + 1}</b><span className="mono muted">{fmtDur(o.duration)} · {fmtBytes(o.size)}</span></div>
         {(o.trim_in > 0.05 || o.duration - o.trim_out > 0.05) && <p className="muted" style={{ fontSize: 12.5 }}>Trimmed in the joined video to {fmtDur(o.trim_in)}–{fmtDur(o.trim_out)}</p>}
         <button className="btn ghost" onClick={() => dl(o.path, `${base}_clip${i + 1}.${ext(o.path)}`, `original clip ${i + 1}`)}>Download clip {i + 1}</button></div>)}</div></section>}

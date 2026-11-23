@@ -80,7 +80,7 @@ export default function ReviewDetail() {
           <div className="media-grid">{slots.map(s => { const f = fileAt(p, s.key); if (!f) return <div key={s.key} className="mtile empty-slot">{s.label}{s.required ? ' · missing' : ''}</div>
             const u = urls[f.storage_path]
             return <div key={s.key} className="mtile">
-              {u ? (f.kind === 'video' ? <video src={u} controls playsInline preload="metadata" /> : <a href={u} target="_blank" rel="noreferrer"><img src={u} alt={s.label} loading="lazy" /></a>) : null}
+              {u ? (f.kind === 'video' ? <video src={u} controls controlsList="nodownload" playsInline preload="metadata" /> : <a href={u} target="_blank" rel="noreferrer"><img src={u} alt={s.label} loading="lazy" /></a>) : null}
               <div className="cap"><span>{s.label}</span><span>{fmtBytes(f.size_bytes)}{f.smoothing ? ' · S' + f.smoothing : ''}</span></div>
             </div> })}</div>
           {rrs.map(r => <div key={r.id} className="redo-note"><b>{r.resolved_at ? 'Redo done' : 'Redo requested'}</b> · {fmtDate(r.created_at)}{r.note && <> — {r.note}</>}</div>)}
